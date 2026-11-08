@@ -45,6 +45,7 @@ Runs **100% in your browser** -- no install, no server, no account. Supplied DOI
 - **DOI-first, multi-source checks** (DataCite + Semantic Scholar + CrossRef + OpenAlex)
 - **Hallucination detection** -- titles that don't exist in major indexes
 - **Pill-style diffs** -- choose your text or edit suggested metadata directly. Changes update the live preview and export.
+- **Raw entry editor** -- expand any result card and edit the complete BibTeX entry as text.
 - **Entry and field deletion** -- use **Delete** beside the bulk actions to remove an entry, or **X** on a field to omit that key from export. Choose monospace **None** to decline a suggested field with no original value.
 - **Custom fields** -- add a new BibTeX key and value directly to any entry; it appears immediately in the preview and export.
 - **BibTeX name encoding** -- author and editor accents appear in editable fields and export as ASCII LaTeX (for example, `M{\'e}ndez`); existing LaTeX is preserved. Unsupported characters stay unchanged.

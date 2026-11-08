@@ -1,8 +1,11 @@
 // Per-field choices on entry cards: keep original, adopt suggestion, edit
 // inline, remove a field or entry, and the "Accept all" / "Keep original" bulk actions.
 import { updatePreview } from "./preview.js";
-import { appendAddedFieldRow, applyAllCardVisibility, updateSummary } from "./cards.js";
-import { namesToBibtex } from "../lib/latex.js";
+import {
+  appendAddedFieldRow, applyAllCardVisibility, editableEntryBib, renderEntryCard, updateSummary,
+} from "./cards.js";
+import { updateAuthorPills } from "./authors.js";
+import { buildResult, findDuplicateTitles, namesToBibtex, parseBib } from "../lib/index.js";
 import { state } from "./state.js";
 
 function editsFor(idx) {
@@ -190,6 +193,73 @@ function deleteEntry(btn) {
   updatePreview();
 }
 
+function resizeEntryTextEditor(textarea) {
+  textarea.style.height = "auto";
+  textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 170), 520)}px`;
+}
+
+function closeEntryTextEditor(form) {
+  form.hidden = true;
+  form.reset();
+  form.querySelector(".entry-text-editor-error").textContent = "";
+  const btn = form.closest(".entry-card").querySelector(".btn-text-edit-entry");
+  btn.classList.remove("active");
+  btn.setAttribute("aria-expanded", "false");
+}
+
+function toggleEntryTextEditor(btn) {
+  const form = btn.closest(".entry-card").querySelector(".entry-text-editor");
+  if (!form.hidden) {
+    closeEntryTextEditor(form);
+    return;
+  }
+  form.hidden = false;
+  btn.classList.add("active");
+  btn.setAttribute("aria-expanded", "true");
+  const textarea = form.querySelector(".entry-text-editor-input");
+  textarea.value = editableEntryBib(Number(btn.dataset.entry));
+  textarea.defaultValue = textarea.value;
+  resizeEntryTextEditor(textarea);
+  textarea.focus();
+}
+
+function applyEntryText(form) {
+  const idx = Number(form.dataset.entry);
+  const parsed = parseBib(form.querySelector(".entry-text-editor-input").value);
+  const error = form.querySelector(".entry-text-editor-error");
+  if (parsed.length !== 1) {
+    error.textContent = parsed.length
+      ? "Keep exactly one BibTeX entry in this editor."
+      : "Enter one valid BibTeX entry, including its @type{key, ...} header.";
+    return;
+  }
+  if (!parsed[0].ID) {
+    error.textContent = "The BibTeX entry needs a citation key after the opening brace.";
+    return;
+  }
+
+  const previousResult = state.results[idx];
+  state.parsedEntries[idx] = parsed[0];
+  state.fieldEdits[idx] = {};
+
+  const duplicateOf = findDuplicateTitles(state.parsedEntries);
+  state.results[idx] = buildResult(
+    parsed[0], idx, previousResult?._found || null, duplicateOf[idx],
+  );
+
+  // Duplicate labels on other processed entries may change when a title/key is
+  // edited, so refresh those cards while retaining all of their field choices.
+  for (let i = 0; i < state.results.length; i++) {
+    const result = state.results[i];
+    if (!result) continue;
+    if (i !== idx) result.duplicate_of = duplicateOf[i];
+    renderEntryCard(result);
+  }
+  updateAuthorPills();
+  applyAllCardVisibility();
+  updatePreview();
+}
+
 function closeAddFieldForm(form) {
   form.hidden = true;
   form.reset();
@@ -304,6 +374,18 @@ export function initFieldActions() {
     }
   });
   document.addEventListener("click", (e) => {
+    const textEditBtn = e.target.closest(".btn-text-edit-entry");
+    if (textEditBtn) {
+      toggleEntryTextEditor(textEditBtn);
+      return;
+    }
+
+    const cancelTextEditBtn = e.target.closest(".entry-text-editor-cancel");
+    if (cancelTextEditBtn) {
+      closeEntryTextEditor(cancelTextEditBtn.closest(".entry-text-editor"));
+      return;
+    }
+
     const addFieldBtn = e.target.closest(".btn-add-field");
     if (addFieldBtn) {
       const form = addFieldBtn.closest(".entry-card").querySelector(".add-field-form");
@@ -342,14 +424,38 @@ export function initFieldActions() {
   });
 
   document.addEventListener("input", (e) => {
+    if (e.target.matches(".entry-text-editor-input")) {
+      e.target.closest(".entry-text-editor")
+        .querySelector(".entry-text-editor-error").textContent = "";
+      resizeEntryTextEditor(e.target);
+      return;
+    }
     const pill = e.target.closest('.pill-suggested[contenteditable="true"], .pill-value[contenteditable="true"]');
     if (pill) onInlineEdit(pill);
   });
 
   document.addEventListener("submit", (e) => {
+    const textEditor = e.target.closest(".entry-text-editor");
+    if (textEditor) {
+      e.preventDefault();
+      applyEntryText(textEditor);
+      return;
+    }
     const form = e.target.closest(".add-field-form");
     if (!form) return;
     e.preventDefault();
     submitAddedField(form);
+  });
+
+  document.addEventListener("keydown", (e) => {
+    const textarea = e.target.closest(".entry-text-editor-input");
+    if (!textarea) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeEntryTextEditor(textarea.closest(".entry-text-editor"));
+    } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      textarea.closest(".entry-text-editor").requestSubmit();
+    }
   });
 }

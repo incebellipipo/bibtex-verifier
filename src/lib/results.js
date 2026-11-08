@@ -39,6 +39,9 @@ export function buildResult(entry, index, found, duplicateOf = null) {
     field_diffs: fieldDiffs,
     suggested,
     found_title: found ? (found.title || "") : "",
+    // Retained in memory so a raw-text edit can be compared again without
+    // another network request. Internal keys are never written to BibTeX.
+    _found: found || null,
     duplicate_of: duplicateOf,
   };
 }

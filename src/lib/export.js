@@ -11,7 +11,7 @@ export function truncateAuthors(authorStr, max) {
 const isPreprintVenue = (venue) =>
   venue.includes("arxiv") || venue.includes("preprint") || venue.includes("corr");
 
-function applyFieldEdits(entry, edits) {
+export function applyFieldEdits(entry, edits) {
   const out = { ...entry };
   for (const [field, fe] of Object.entries(edits || {})) {
     if (!fe) continue;

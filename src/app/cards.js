@@ -1,5 +1,8 @@
 // Entry cards: rendering, status/summary badges, and filter/search visibility.
-import { COMPARED_FIELDS, entryMatchesQuery, namesToBibtex, stripLatex, truncateAuthors } from "../lib/index.js";
+import {
+  applyFieldEdits, COMPARED_FIELDS, entriesToBib, entryMatchesQuery, namesToBibtex,
+  stripLatex, truncateAuthors,
+} from "../lib/index.js";
 import { $, $$, esc } from "./dom.js";
 import { getSettings } from "./settings.js";
 import { state } from "./state.js";
@@ -47,6 +50,13 @@ function doiLink(value) {
 
 function doiValueWrap(valueHTML, value) {
   return `<span class="doi-value-wrap">${valueHTML}${doiLink(value)}</span>`;
+}
+
+export function editableEntryBib(idx) {
+  const entry = applyFieldEdits(state.parsedEntries[idx], state.fieldEdits[idx]);
+  for (const field of ["author", "editor"])
+    if (entry[field]) entry[field] = namesToBibtex(entry[field]);
+  return entriesToBib([entry]).trim();
 }
 
 // ─── Visibility (filter + search) ────────────────────────────────────
@@ -361,6 +371,29 @@ export function renderEntryCard(r) {
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
   </button>`;
+  const textEditId = `entry-text-editor-${idx}`;
+  const textEditBtn = `<button class="btn-text-edit-entry" type="button" data-entry="${idx}"
+      aria-expanded="false" aria-controls="${textEditId}" title="Edit this entry as BibTeX text">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+    </svg>
+    <span>Text edit</span>
+  </button>`;
+  const textEditor = `<form class="entry-text-editor" id="${textEditId}" data-entry="${idx}" hidden>
+    <div class="entry-text-editor-heading">
+      <div>
+        <strong>Edit BibTeX entry</strong>
+        <span>Applying replaces this entry and resets its field choices. Re-run verification after changing its title or DOI.</span>
+      </div>
+      <kbd>Ctrl/⌘ + Enter</kbd>
+    </div>
+    <textarea class="entry-text-editor-input" spellcheck="false" aria-label="BibTeX text for ${esc(r.entry_id || `entry ${idx + 1}`)}">${esc(editableEntryBib(idx))}</textarea>
+    <div class="entry-text-editor-footer">
+      <div class="entry-text-editor-error" role="alert" aria-live="polite"></div>
+      <button type="button" class="entry-text-editor-cancel">Cancel</button>
+      <button type="submit" class="entry-text-editor-apply">Apply text</button>
+    </div>
+  </form>`;
 
   card.innerHTML = `<div class="entry-header">
     <div class="entry-header-text">
@@ -369,12 +402,13 @@ export function renderEntryCard(r) {
     </div>
     <div class="entry-header-aside">
       ${jumpBtn}
+      ${textEditBtn}
       <div class="entry-tags">
         ${r.duplicate_of ? '<span class="status-tag tag-duplicate">Duplicate</span>' : ""}
         <span class="status-tag tag-${r.status}">${statusLabel(r.status)}</span>
       </div>
     </div>
-  </div>${renderHints(r)}${diffHTML}${actionsHTML}${addFieldForm}${renderSearchLinks(r.title)}`;
+  </div>${textEditor}${renderHints(r)}${diffHTML}${actionsHTML}${addFieldForm}${renderSearchLinks(r.title)}`;
 
   applyCardVisibility(card);
   // The retry pass re-renders a card in place so it keeps its position.

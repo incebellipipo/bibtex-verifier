@@ -87,6 +87,7 @@ export function startVerificationFromContent(content, statusMsg) {
     return;
   }
 
+  document.body.classList.add("verification-active");
   resultsSection.style.display = "block";
   barProgressText.textContent = `Verifying 0 / ${state.parsedEntries.length} entries...`;
   runVerification(resumeTour);

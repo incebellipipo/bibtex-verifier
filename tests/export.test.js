@@ -1,7 +1,10 @@
 import "./helpers/setup.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildExportEntries, buildResult, diffLines, findDuplicateTitles, truncateAuthors } from "../src/lib/index.js";
+import {
+  applyFieldEdits, buildExportEntries, buildResult, diffLines, entriesToBib,
+  findDuplicateTitles, parseBib, truncateAuthors,
+} from "../src/lib/index.js";
 
 const DEFAULT_SETTINGS = {
   removeDuplicates: false, dedupBy: "title", removeNotFound: false,
@@ -34,10 +37,12 @@ describe("buildResult", () => {
   });
 
   it("carries comparison output and the duplicate marker", () => {
-    const r = buildResult(entry, 0, { title: "Test Paper", year: "2021" }, "other");
+    const found = { title: "Test Paper", year: "2021" };
+    const r = buildResult(entry, 0, found, "other");
     assert.equal(r.status, "updated");
     assert.equal(r.found_title, "Test Paper");
     assert.equal(r.duplicate_of, "other");
+    assert.equal(r._found, found);
     assert.ok(r.field_diffs.some(d => d.field === "year"));
   });
 
@@ -45,6 +50,24 @@ describe("buildResult", () => {
     const r = buildResult(entry, 0, { title: "Something Else Entirely", year: "2021" });
     assert.equal(r.status, "needs_review");
     assert.equal(r.field_diffs[0].field, "title");
+  });
+});
+
+describe("raw entry text editing", () => {
+  it("serializes the current field choices into one editable BibTeX entry", () => {
+    const current = applyFieldEdits(
+      { ENTRYTYPE: "article", ID: "paper", title: "Original", year: "2020" },
+      {
+        title: { action: "custom", value: "Edited title" },
+        year: { action: "remove", value: "" },
+        doi: { action: "custom", value: "10.1234/example", _added: true },
+      },
+    );
+    const reparsed = parseBib(entriesToBib([current]));
+    assert.equal(reparsed.length, 1);
+    assert.equal(reparsed[0].title, "Edited title");
+    assert.equal(reparsed[0].doi, "10.1234/example");
+    assert.ok(!("year" in reparsed[0]));
   });
 });
 
