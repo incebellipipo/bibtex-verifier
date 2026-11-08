@@ -45,6 +45,10 @@ function doiLink(value) {
             title="${esc(hoverText)}" aria-label="${esc(hoverText)}">${EXTERNAL_LINK_ICON}</a>`;
 }
 
+function doiValueWrap(valueHTML, value) {
+  return `<span class="doi-value-wrap">${valueHTML}${doiLink(value)}</span>`;
+}
+
 // ─── Visibility (filter + search) ────────────────────────────────────
 function cardMatchesFilter(card) {
   if (state.activeFilter === "all") return true;
@@ -149,6 +153,14 @@ function renderDiffRow(r, idx, d, hasSuggestion, maxAuthors) {
   const displaySuggestion = (d.field === "author" && maxAuthors > 0 && currentAction !== "custom")
     ? truncateAuthors(suggestionText, maxAuthors) : suggestionText;
   const authorMatchHidden = d.field === "author" && maxAuthors > 0 && displaySuggestion.trim() === (d.original || "").trim();
+  const originalHTML = `<button class="choice-pill pill-original ${isEnrichment ? "pill-none" : ""} ${currentAction === "original" ? "active" : ""} ${currentAction === "remove" ? "removed" : ""}"
+                data-entry="${idx}" data-field="${esc(d.field)}" data-action="original" data-val="${esc(d.original || "")}"
+                title="${isEnrichment ? "Do not add this field" : "Keep your value"}">${isEnrichment ? '<code class="none-label">None</code>' : esc(d.original)}</button>`;
+  const suggestedHTML = `<span class="choice-pill pill-suggested ${currentAction === "found" || currentAction === "custom" ? "active" : ""} ${currentAction === "remove" ? "removed" : ""}"
+                contenteditable="${currentAction === "remove" ? "false" : "true"}"
+                spellcheck="false"
+                data-entry="${idx}" data-field="${esc(d.field)}" data-action="found" data-val="${esc(d.found || "")}"
+                title="Use suggested value (click to select, edit to customize)">${esc(displaySuggestion)}</span>`;
 
   return `<tr class="diff-row${authorMatchHidden ? " author-match-hidden" : ""}" data-entry="${idx}" data-field="${esc(d.field)}" data-action="${currentAction}"
       data-enrichment="${isEnrichment ? "1" : ""}"
@@ -156,17 +168,12 @@ function renderDiffRow(r, idx, d, hasSuggestion, maxAuthors) {
       data-original-val="${encodeURIComponent(d.original || "")}">
       <td class="field-name"><span class="field-name-pill">${esc(d.field)}</span></td>
       <td class="val-col val-col-original">
-        ${`<button class="choice-pill pill-original ${isEnrichment ? "pill-none" : ""} ${currentAction === "original" ? "active" : ""} ${currentAction === "remove" ? "removed" : ""}"
-                data-entry="${idx}" data-field="${esc(d.field)}" data-action="original" data-val="${esc(d.original || "")}"
-                title="${isEnrichment ? "Do not add this field" : "Keep your value"}">${isEnrichment ? '<code class="none-label">None</code>' : esc(d.original)}</button>`}
+        ${d.field === "doi" && d.original ? doiValueWrap(originalHTML, d.original) : originalHTML}
       </td>
       <td class="val-col val-col-suggested">
-        ${hasSuggestion ? `<span class="suggested-value-wrap ${d.field === "doi" ? "has-doi-link" : ""}"><span class="choice-pill pill-suggested ${currentAction === "found" || currentAction === "custom" ? "active" : ""} ${currentAction === "remove" ? "removed" : ""}"
-                contenteditable="${currentAction === "remove" ? "false" : "true"}"
-                spellcheck="false"
-                data-entry="${idx}" data-field="${esc(d.field)}" data-action="found" data-val="${esc(d.found || "")}"
-                title="Use suggested value (click to select, edit to customize)">${esc(displaySuggestion)}</span>
-                ${d.field === "doi" ? doiLink(d.found) : ""}</span>` : ""}
+        ${hasSuggestion ? (d.field === "doi"
+          ? doiValueWrap(suggestedHTML, suggestionText)
+          : `<span class="suggested-value-wrap">${suggestedHTML}</span>`) : ""}
       </td>
       <td class="field-actions-mini">
         ${removeFieldButton(idx, d.field, currentAction, isEnrichment ? "Remove suggested field" : "Remove field")}
@@ -179,13 +186,15 @@ function renderPlainFieldRow(idx, f, entry) {
   if (!edits[f]) edits[f] = { action: "original", value: entry[f] || "" };
   const fe = edits[f];
   const removed = fe.action === "remove";
+  const value = fieldText(f, removed ? fe._savedValue : fe.value);
+  const valueHTML = `<span class="choice-pill pill-value ${removed ? "removed" : "active"}"
+              contenteditable="${removed ? "false" : "true"}" spellcheck="false"
+              data-entry="${idx}" data-field="${esc(f)}">${esc(value)}</span>`;
 
   return `<tr class="diff-row field-row-plain" data-entry="${idx}" data-field="${esc(f)}" data-action="${fe.action}">
       <td class="field-name"><span class="field-name-pill">${esc(f)}</span></td>
       <td class="val-col" colspan="2">
-        <span class="choice-pill pill-value ${removed ? "removed" : "active"}"
-              contenteditable="${removed ? "false" : "true"}" spellcheck="false"
-              data-entry="${idx}" data-field="${esc(f)}">${esc(fieldText(f, removed ? fe._savedValue : fe.value))}</span>
+        ${f === "doi" ? doiValueWrap(valueHTML, value) : valueHTML}
       </td>
       <td class="field-actions-mini">
         ${removeFieldButton(idx, f, fe.action)}
@@ -240,8 +249,8 @@ function renderHints(r) {
 
   if (r.status === "not_found") {
     html += `<div class="not-found-hint">${(r.title || "").trim()
-      ? "No matching publication was found in Semantic Scholar, CrossRef, or OpenAlex for this title. Try fixing typos or adding missing words, then re-run verification, or check the reference manually."
-      : "This entry has no title, so it cannot be looked up automatically. Add a title in your .bib file or verify the entry by hand."}</div>`;
+      ? "No matching publication was found for this title, and any supplied DOI could not be confirmed through DataCite. Try fixing typos or check the reference manually."
+      : "This entry has neither a title nor a DataCite-confirmed DOI. Add one to your .bib file or verify the entry by hand."}</div>`;
   }
   return html;
 }

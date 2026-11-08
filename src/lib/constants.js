@@ -4,6 +4,6 @@ export const TITLE_MATCH_THRESHOLD = 85;
 export const MIN_TITLE_SIM = 70;
 
 export const COMPARED_FIELDS = [
-  "author", "year", "journal", "booktitle",
+  "author", "editor", "year", "journal", "booktitle",
   "volume", "number", "pages", "doi", "publisher",
 ];

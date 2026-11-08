@@ -17,6 +17,7 @@ describe("constants", () => {
 
   it("COMPARED_FIELDS contains expected fields", () => {
     assert.ok(COMPARED_FIELDS.includes("author"));
+    assert.ok(COMPARED_FIELDS.includes("editor"));
     assert.ok(COMPARED_FIELDS.includes("year"));
     assert.ok(COMPARED_FIELDS.includes("doi"));
   });

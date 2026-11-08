@@ -9,11 +9,13 @@ let calls;
 const json = (status, body) => new Response(JSON.stringify(body), { status });
 
 /** Route mocked requests by host; each handler gets the parsed URL. */
-function mockFetch({ ss = () => json(404, {}), cr = () => json(200, { message: { items: [] } }),
+function mockFetch({ dc = () => json(404, {}), ss = () => json(404, {}),
+  cr = () => json(200, { message: { items: [] } }),
   oa = () => json(200, { results: [] }) } = {}) {
   globalThis.fetch = async (url) => {
     const u = new URL(url);
     calls.push(u);
+    if (u.host.includes("datacite")) return dc(u);
     if (u.host.includes("semanticscholar")) return ss(u);
     if (u.host.includes("crossref")) return cr(u);
     if (u.host.includes("openalex")) return oa(u);
@@ -31,6 +33,25 @@ const crItem = {
   volume: "30", page: "5998-6008", DOI: "10.5555/1",
 };
 
+const dcRecord = {
+  data: {
+    id: "10.5555/1",
+    type: "dois",
+    attributes: {
+      doi: "10.5555/1",
+      titles: [{ title: "Attention Is All You Need" }],
+      creators: [{ familyName: "Vaswani", givenName: "Ashish", nameType: "Personal" }],
+      contributors: [{ familyName: "Editor", givenName: "Ed", contributorType: "Editor" }],
+      publicationYear: 2017,
+      state: "findable",
+      isActive: true,
+      publisher: { name: "Example Press" },
+      container: { title: "NeurIPS" },
+      url: "https://example.test/attention",
+    },
+  },
+};
+
 describe("lookupPaper", () => {
   beforeEach(() => {
     calls = [];
@@ -38,6 +59,58 @@ describe("lookupPaper", () => {
     resetRateLimits();
   });
   afterEach(() => { globalThis.fetch = realFetch; });
+
+  it("checks a supplied DOI in DataCite before using its metadata", async () => {
+    mockFetch({ dc: () => json(200, dcRecord) });
+    const found = await lookupPaper(
+      "Attention Is All You Need", "https://doi.org/10.5555/1",
+      { title: "Attention Is All You Need", author: "Vaswani, Ashish", year: "2017" },
+    );
+
+    assert.equal(found._source, "datacite");
+    assert.equal(found.publisher, "Example Press");
+    assert.equal(found.editor, "Editor, Ed");
+    const request = calls.find(u => u.host.includes("datacite"));
+    assert.equal(request.pathname, "/dois/10.5555/1");
+    assert.equal(request.searchParams.get("enriched"), "true");
+    assert.equal(request.searchParams.get("affiliation"), "true");
+    assert.equal(request.searchParams.get("publisher"), "true");
+  });
+
+  it("uses title sources to fill fields missing from a matching DataCite record", async () => {
+    mockFetch({
+      dc: () => json(200, dcRecord),
+      ss: (u) => (u.pathname.endsWith("/match") ? json(200, { data: [ssPaper] }) : json(200, { data: [] })),
+      cr: () => json(200, { message: { items: [crItem] } }),
+    });
+    const found = await lookupPaper(
+      "Attention Is All You Need", "10.5555/1", { title: "Attention Is All You Need" },
+    );
+    assert.equal(found._source, "datacite+semantic_scholar+crossref");
+    assert.equal(found.volume, "30");
+    assert.equal(found.pages, "5998-6008");
+  });
+
+  it("ignores DataCite metadata when the DOI belongs to a different work", async () => {
+    const wrongRecord = structuredClone(dcRecord);
+    wrongRecord.data.attributes.titles[0].title = "A Completely Different Publication";
+    mockFetch({
+      dc: () => json(200, wrongRecord),
+      cr: () => json(200, { message: { items: [crItem] } }),
+    });
+    const found = await lookupPaper(
+      "Attention Is All You Need", "10.5555/1", { title: "Attention Is All You Need" },
+    );
+    assert.equal(found._source, "crossref");
+    assert.equal(found.title, "Attention Is All You Need");
+  });
+
+  it("can verify and populate an entry that only contains a DOI", async () => {
+    mockFetch({ dc: () => json(200, dcRecord) });
+    const found = await lookupPaper("", "10.5555/1", { doi: "10.5555/1" });
+    assert.equal(found._source, "datacite");
+    assert.equal(found.title, "Attention Is All You Need");
+  });
 
   it("merges a Semantic Scholar match with the same CrossRef paper", async () => {
     mockFetch({

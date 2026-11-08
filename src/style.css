@@ -1038,7 +1038,7 @@ code {
   display: contents;
 }
 
-.suggested-value-wrap.has-doi-link {
+.doi-value-wrap {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1047,7 +1047,7 @@ code {
   max-width: 100%;
 }
 
-.suggested-value-wrap.has-doi-link .choice-pill {
+.doi-value-wrap .choice-pill {
   max-width: calc(100% - 1.75rem);
 }
 

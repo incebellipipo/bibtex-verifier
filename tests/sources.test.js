@@ -1,7 +1,55 @@
 import "./helpers/setup.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { crossrefToStandard, isPreprint, openAlexToStandard, ssToStandard } from "../src/lib/index.js";
+import {
+  crossrefToStandard, dataCiteToStandard, isPreprint, openAlexToStandard, ssToStandard,
+} from "../src/lib/index.js";
+
+describe("dataCiteToStandard", () => {
+  it("converts singleton DOI metadata and editors to standard fields", () => {
+    const result = dataCiteToStandard({ data: { id: "10.1234/example", attributes: {
+      doi: "10.1234/example",
+      titles: [{ title: "A DataCite Paper" }],
+      creators: [
+        { familyName: "Mendez", givenName: "Ana", nameType: "Personal" },
+        { name: "Research Consortium", nameType: "Organizational" },
+      ],
+      contributors: [
+        { familyName: "Smith", givenName: "Jo", contributorType: "Editor" },
+        { name: "Ignored Person", contributorType: "ProjectLeader" },
+      ],
+      publicationYear: 2024,
+      publisher: { name: "Example Press" },
+      container: {
+        title: "Example Journal", volume: "12", issue: "3",
+        firstPage: "40", lastPage: "49",
+      },
+      url: "https://example.test/paper",
+    } } });
+
+    assert.equal(result.title, "A DataCite Paper");
+    assert.equal(result.author, "Mendez, Ana and Research Consortium");
+    assert.equal(result.editor, "Smith, Jo");
+    assert.equal(result.year, "2024");
+    assert.equal(result.journal, "Example Journal");
+    assert.equal(result.volume, "12");
+    assert.equal(result.number, "3");
+    assert.equal(result.pages, "40-49");
+    assert.equal(result.publisher, "Example Press");
+    assert.equal(result.doi, "10.1234/example");
+    assert.equal(result._source, "datacite");
+  });
+
+  it("handles sparse attributes and a string publisher", () => {
+    const result = dataCiteToStandard({ attributes: {
+      titles: [{ title: "Sparse Record", titleType: "AlternativeTitle" }],
+      publisher: "Archive",
+    } });
+    assert.equal(result.title, "Sparse Record");
+    assert.equal(result.publisher, "Archive");
+    assert.equal(result.author, "");
+  });
+});
 
 describe("crossrefToStandard", () => {
   it("converts CrossRef response to standard format", () => {

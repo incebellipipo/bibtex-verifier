@@ -24,7 +24,7 @@
 
 </div>
 
-Runs **100% in your browser** -- no install, no server, no account. Only paper titles are sent to public APIs ([Semantic Scholar](https://www.semanticscholar.org/), [CrossRef](https://www.crossref.org/), and [OpenAlex](https://openalex.org/) as a fallback); your `.bib` never leaves your machine.
+Runs **100% in your browser** -- no install, no server, no account. Supplied DOIs are checked with [DataCite](https://datacite.org/); paper titles are checked with [Semantic Scholar](https://www.semanticscholar.org/), [CrossRef](https://www.crossref.org/), and [OpenAlex](https://openalex.org/). Your complete `.bib` never leaves your machine.
 
 ---
 
@@ -42,7 +42,7 @@ Runs **100% in your browser** -- no install, no server, no account. Only paper t
 ## Features
 
 - **Drag-and-drop** or **paste** BibTeX from Overleaf
-- **Multi-source** checks (Semantic Scholar + CrossRef, with OpenAlex fallback)
+- **DOI-first, multi-source checks** (DataCite + Semantic Scholar + CrossRef + OpenAlex)
 - **Hallucination detection** -- titles that don't exist in major indexes
 - **Pill-style diffs** -- choose your text or edit suggested metadata directly. Changes update the live preview and export.
 - **Entry and field deletion** -- use **Delete** beside the bulk actions to remove an entry, or **X** on a field to omit that key from export. Choose monospace **None** to decline a suggested field with no original value.
@@ -60,7 +60,8 @@ Runs **100% in your browser** -- no install, no server, no account. Only paper t
 
 ```
 Upload or paste .bib -> Parse entries -> For each entry:
-    Semantic Scholar match -> CrossRef enrich -> OpenAlex fallback
+    DOI present? -> DataCite metadata check
+    Title lookup -> Semantic Scholar -> CrossRef enrich -> OpenAlex fallback
 -> Compare fields -> Verified / Auto-updated / Needs review / Not found
 -> You edit choices -> Export corrected .bib
 ```

@@ -2,7 +2,7 @@
   "name": "bibtex-verifier",
   "version": "0.0.0",
   "private": true,
-  "description": "Verify BibTeX entries against Semantic Scholar and CrossRef with OpenAlex fallback, entirely in the browser.",
+  "description": "Verify BibTeX entries with DataCite, Semantic Scholar, CrossRef and OpenAlex, entirely in the browser.",
   "license": "MIT",
   "type": "module",
   "engines": {

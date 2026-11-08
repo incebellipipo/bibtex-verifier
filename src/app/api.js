@@ -1,10 +1,12 @@
-// Network layer: rate-limited lookups against Semantic Scholar, CrossRef and
-// OpenAlex. Only paper titles are ever sent.
+// Network layer: rate-limited DOI metadata retrieval from DataCite plus title
+// lookups against Semantic Scholar, CrossRef and OpenAlex.
 import {
-  authorsNeedEnrichment, bestMatch, crossrefToStandard, isSamePaper, mergeMetadata, MIN_TITLE_SIM,
-  openAlexToStandard, ssToStandard, titleSimilarity,
+  authorsNeedEnrichment, bestMatch, crossrefToStandard, dataCiteToStandard, isSamePaper,
+  mergeMetadata, MIN_TITLE_SIM, openAlexToStandard, ssToStandard, TITLE_MATCH_THRESHOLD,
+  titleSimilarity,
 } from "../lib/index.js";
 
+const DATACITE_API = "https://api.datacite.org/dois";
 const CROSSREF_API = "https://api.crossref.org/works";
 const SS_MATCH = "https://api.semanticscholar.org/graph/v1/paper/search/match";
 const SS_SEARCH = "https://api.semanticscholar.org/graph/v1/paper/search";
@@ -33,6 +35,7 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // One bucket per source: current delay, its clamps, last request time, and a
 // run of consecutive successes used to speed back up.
 const RATE_DEFAULTS = {
+  dc: { delay: 100, min: 50, max: 2000 },
   ss: { delay: 500, min: 300, max: 3000 },
   cr: { delay: 100, min: 50,  max: 2000 },
   oa: { delay: 100, min: 50,  max: 2000 },
@@ -61,6 +64,7 @@ function rateSuccess(source) {
 }
 
 function sourceOf(url) {
+  if (url.includes("datacite.org")) return "dc";
   if (url.includes("semanticscholar.org")) return "ss";
   if (url.includes("openalex.org")) return "oa";
   return "cr";
@@ -135,27 +139,31 @@ async function searchCrossref(title) {
 }
 
 async function searchOpenAlex(title) {
-  // No `mailto`: only the title may leave the user's machine.
+  // Keep this request limited to the title; no user or file identifiers.
   const data = await fetchJSON(OPENALEX_API, {
     search: title, per_page: "5", select: OPENALEX_FIELDS,
   });
   return (data?.results || []).map(openAlexToStandard);
 }
 
-/**
- * Find the best published record for a title, or null if no source has it.
- * Throws TransientLookupError when nothing matched but a source failed
- * transiently, so the caller can retry instead of reporting "not found".
- */
-export async function lookupPaper(title) {
-  let transient = false;
-  const attempt = async (fn) => {
-    try { return await fn(); }
-    catch (err) {
-      if (err instanceof TransientLookupError) { transient = true; return null; }
-      throw err;
-    }
-  };
+export function normalizeDoi(value) {
+  return String(value || "").trim()
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
+    .replace(/^doi:\s*/i, "");
+}
+
+async function searchDataCiteDoi(value) {
+  const doi = normalizeDoi(value);
+  if (!doi) return null;
+  const safeDoi = encodeURI(doi).replace(/#/g, "%23").replace(/\?/g, "%3F");
+  const data = await fetchJSON(`${DATACITE_API}/${safeDoi}`, {
+    enriched: "true", affiliation: "true", publisher: "true",
+  }, { is404Ok: true });
+  return data ? dataCiteToStandard(data) : null;
+}
+
+async function lookupByTitle(title, attempt) {
+  if (!title.trim()) return null;
 
   const ssMatch = await attempt(() => searchSSMatch(title));
   if (ssMatch && titleSimilarity(title, ssMatch.title || "") >= MIN_TITLE_SIM) {
@@ -179,8 +187,53 @@ export async function lookupPaper(title) {
   const oaMatch = bestMatch((await attempt(() => searchOpenAlex(title))) || [], title);
   if (oaMatch) return oaMatch;
 
-  const ssSearchMatch = bestMatch((await attempt(() => searchSSSearch(title))) || [], title);
-  if (ssSearchMatch) return ssSearchMatch;
+  return bestMatch((await attempt(() => searchSSSearch(title))) || [], title);
+}
+
+function dataCiteMatchesEntry(entry, found) {
+  if (!found?.title) return false;
+  if (found._doiActive === false
+      || (found._doiState && found._doiState !== "findable")) return false;
+  if (entry.title?.trim()
+      && titleSimilarity(entry.title, found.title) < TITLE_MATCH_THRESHOLD) return false;
+  // isSamePaper also checks year and author overlap. Supplying the confirmed
+  // DataCite title here lets DOI-only entries pass while retaining those checks.
+  return isSamePaper({ ...entry, title: found.title }, found);
+}
+
+/**
+ * Check a supplied DOI through DataCite, then find and merge matching title
+ * metadata. Returns null when no source has a credible record.
+ * Throws TransientLookupError when nothing matched but a source failed
+ * transiently, so the caller can retry instead of reporting "not found".
+ */
+export async function lookupPaper(title, doi = "", original = {}) {
+  title = String(title || "");
+  let transient = false;
+  const attempt = async (fn) => {
+    try { return await fn(); }
+    catch (err) {
+      if (err instanceof TransientLookupError) { transient = true; return null; }
+      throw err;
+    }
+  };
+
+  const entry = { ...original, title: title || original.title || "" };
+  const dataCiteRecord = doi
+    ? await attempt(() => searchDataCiteDoi(doi))
+    : null;
+  const dataCiteMatch = dataCiteMatchesEntry(entry, dataCiteRecord)
+    ? dataCiteRecord : null;
+
+  const titleMatch = await lookupByTitle(title, attempt);
+  if (dataCiteMatch) {
+    // The DOI-specific record is primary. Matching title sources may fill
+    // fields DataCite does not carry, or provide a more complete author list.
+    return titleMatch && isSamePaper(dataCiteMatch, titleMatch)
+      ? mergeMetadata(dataCiteMatch, titleMatch)
+      : dataCiteMatch;
+  }
+  if (titleMatch) return titleMatch;
 
   if (transient) throw new TransientLookupError("inconclusive lookup");
   return null;

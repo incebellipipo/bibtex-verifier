@@ -60,7 +60,7 @@ async function lookupEntry(entry) {
     return { found: null, inconclusive: false };
   }
   try {
-    return { found: await lookupPaper(title), inconclusive: false };
+    return { found: await lookupPaper(title, entry.doi || "", entry), inconclusive: false };
   } catch (err) {
     if (err instanceof TransientLookupError) return { found: null, inconclusive: true };
     console.warn("Lookup failed:", err);
@@ -105,7 +105,7 @@ async function runVerification(resumeTour) {
     barProgressFill.style.width = Math.round(((i + 1) / total) * 100) + "%";
     barProgressText.textContent = `Verifying ${i + 1} / ${total}: ${title.slice(0, 50)}…`;
 
-    if (!title.trim()) {
+    if (!title.trim() && !(entry.doi || "").trim()) {
       showResult(buildResult(entry, i, null, duplicateOf[i]));
       continue;
     }

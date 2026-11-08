@@ -14,6 +14,28 @@ function displayFieldValue(field, value) {
   return ["author", "editor"].includes(field) ? namesToBibtex(value || "") : (value || "");
 }
 
+function syncDoiLink(pill) {
+  if (pill.dataset.field !== "doi") return;
+  const link = pill.closest(".doi-value-wrap")?.querySelector(".doi-external-link");
+  if (!link) return;
+
+  const doi = pill.textContent.trim()
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
+    .replace(/^doi:\s*/i, "");
+  if (!doi) {
+    link.hidden = true;
+    link.removeAttribute("href");
+    return;
+  }
+
+  const url = `https://doi.org/${encodeURI(doi).replace(/#/g, "%23").replace(/\?/g, "%3F")}`;
+  const hoverText = `Open DOI in a new tab: ${url}`;
+  link.hidden = false;
+  link.href = url;
+  link.title = hoverText;
+  link.setAttribute("aria-label", hoverText);
+}
+
 function setFieldEdit(idx, field, edit) {
   const edits = editsFor(idx);
   edits[field] = {
@@ -59,6 +81,7 @@ function setSuggestedPill(pill, { active, editable, text }) {
     pill.textContent = text;
     delete pill.dataset.customValue;
   }
+  syncDoiLink(pill);
 }
 
 function selectOriginal(origPill) {
@@ -217,6 +240,7 @@ function submitAddedField(form) {
     pill.classList.remove("removed");
     pill.classList.add("active");
     pill.contentEditable = "true";
+    syncDoiLink(pill);
     existingRow.querySelector(".fa-btn-x")?.classList.remove("active");
   } else {
     appendAddedFieldRow(card, idx, field);
@@ -263,6 +287,7 @@ function onInlineEdit(pill) {
   setFieldEdit(idx, pill.dataset.field, { action: "custom", value: pill.textContent.trim() });
 
   const row = pill.closest(".diff-row");
+  syncDoiLink(pill);
   row.querySelectorAll(".pill-original").forEach(p => p.classList.remove("active"));
   if (pill.classList.contains("pill-suggested")) pill.classList.add("active");
   afterRowChange(row, "custom");

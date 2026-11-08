@@ -71,7 +71,7 @@ function markOnboardingComplete() {
 const introOnboardingSteps = [
   {
     title: "Welcome",
-    body: "BibTeX Verifier checks each entry against Semantic Scholar and CrossRef (with OpenAlex as a fallback) — wrong metadata, missing DOIs, duplicates, and citations that don’t exist online (including AI hallucinations). Your file stays in the browser.",
+    body: "BibTeX Verifier checks supplied DOIs through DataCite, then checks titles through Semantic Scholar, CrossRef, and OpenAlex — finding wrong metadata, missing DOIs, duplicates, and citations that don’t exist online. Your file stays in the browser.",
     target: null,
   },
   {
@@ -91,7 +91,7 @@ const introOnboardingSteps = [
   },
   {
     title: "Run verification",
-    body: "Click <strong>Verify pasted BibTeX</strong> when you’re ready. The app queries Semantic Scholar, CrossRef, and OpenAlex (a short wait per entry). <strong>When it finishes, the tour continues</strong> and walks through both sample results — updated vs not found — plus settings.",
+    body: "Click <strong>Verify pasted BibTeX</strong> when you’re ready. The app queries DataCite for supplied DOIs, then Semantic Scholar, CrossRef, and OpenAlex by title. <strong>When it finishes, the tour continues</strong> and walks through the results.",
     target: "#btn-verify-paste",
   },
   {
@@ -111,7 +111,7 @@ const postVerifySteps = [
   },
   {
     title: "First entry — metadata updated",
-    body: "This row matched a real paper. The sample used a <strong>wrong journal</strong> on purpose — suggested venue, DOI, and other fields come from Semantic Scholar / CrossRef / OpenAlex. Each line compares your text to the suggestion; accept or revert per field.",
+    body: "This row matched a real paper. The sample used a <strong>wrong journal</strong> on purpose — suggested metadata comes from DataCite / Semantic Scholar / CrossRef / OpenAlex. Each line compares your text to the suggestion; accept or revert per field.",
     target: ".entry-list .entry-card:nth-child(1)",
     panelTop: true,
   },

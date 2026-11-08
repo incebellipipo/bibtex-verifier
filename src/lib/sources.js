@@ -1,5 +1,6 @@
 // Converters from each API's JSON to the standard record shape:
-// title, author, year, journal, volume, number, pages, doi, publisher, url, _source.
+// title, author/editor, year, journal, volume, number, pages, doi, publisher,
+// url, _source.
 
 // "First Middle Last" -> "Last, First Middle"
 function lastFirst(name) {
@@ -80,5 +81,49 @@ export function openAlexToStandard(work) {
     publisher: source.host_organization_name || "",
     url: doi ? `https://doi.org/${doi}` : (work.id || ""),
     _source: "openalex",
+  };
+}
+
+function dataCitePerson(person) {
+  const family = person.familyName || "";
+  const given = person.givenName || "";
+  if (family) return `${family}, ${given}`.replace(/, $/, "");
+  return person.name || "";
+}
+
+/** Convert the attributes from a DataCite singleton DOI response. */
+export function dataCiteToStandard(record) {
+  const attrs = record?.data?.attributes || record?.attributes || record || {};
+  const creators = (attrs.creators || []).map(dataCitePerson).filter(Boolean);
+  const editors = (attrs.contributors || [])
+    .filter(person => person.contributorType === "Editor")
+    .map(dataCitePerson)
+    .filter(Boolean);
+  const primaryTitle = (attrs.titles || []).find(title => !title.titleType)
+    || (attrs.titles || [])[0]
+    || {};
+  const container = attrs.container || {};
+  const first = container.firstPage || "";
+  const last = container.lastPage || "";
+  const pages = first && last ? `${first}-${last}` : (first || last || "");
+  const publisher = typeof attrs.publisher === "string"
+    ? attrs.publisher : (attrs.publisher?.name || "");
+  const doi = attrs.doi || record?.data?.id || "";
+
+  return {
+    title: primaryTitle.title || "",
+    author: creators.join(" and "),
+    editor: editors.join(" and "),
+    year: (attrs.publicationYear || "").toString(),
+    journal: container.title || "",
+    volume: container.volume || "",
+    number: container.issue || "",
+    pages,
+    doi,
+    publisher,
+    url: attrs.url || (doi ? `https://doi.org/${doi}` : ""),
+    _doiState: attrs.state || "",
+    _doiActive: attrs.isActive,
+    _source: "datacite",
   };
 }
