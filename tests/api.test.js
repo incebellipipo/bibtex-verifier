@@ -50,6 +50,38 @@ describe("lookupPaper", () => {
     assert.equal(found.pages, "5998-6008");
   });
 
+  it("enriches an abbreviated matched author list from OpenAlex", async () => {
+    const title = "Hybrid controller concept for dynamic positioning of marine vessels with experimental results";
+    const abbreviated = {
+      title, year: 2018, venue: "Automatica",
+      authors: [
+        { name: "Astrid H. Brodtkorb" }, { name: "Svenn Are Vaerno" },
+        { name: "A. Teel" }, { name: "A. Sørensen" }, { name: "R. Skjetne" },
+      ],
+      externalIds: { DOI: "10.1016/j.automatica.2018.03.047" },
+    };
+    const openAlex = {
+      title, publication_year: 2018, id: "W1",
+      authorships: [
+        { author: { display_name: "Astrid H. Brodtkorb" } },
+        { author: { display_name: "Svenn Are Værnø" } },
+        { author: { display_name: "Andrew R. Teel" } },
+        { author: { display_name: "Asgeir J. Sørensen" } },
+        { author: { display_name: "Roger Skjetne" } },
+      ],
+      primary_location: { source: { display_name: "Automatica" } },
+      doi: "https://doi.org/10.1016/j.automatica.2018.03.047",
+    };
+    mockFetch({
+      ss: (u) => (u.pathname.endsWith("/match") ? json(200, { data: [abbreviated] }) : json(200, { data: [] })),
+      oa: () => json(200, { results: [openAlex] }),
+    });
+    const found = await lookupPaper(title);
+    assert.equal(found.author,
+      "Brodtkorb, Astrid H. and Værnø, Svenn Are and Teel, Andrew R. and Sørensen, Asgeir J. and Skjetne, Roger");
+    assert.equal(found._source, "semantic_scholar+openalex");
+  });
+
   it("only sends the title to the APIs", async () => {
     mockFetch();
     await lookupPaper("Some Title");

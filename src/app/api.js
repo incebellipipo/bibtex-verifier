@@ -1,7 +1,7 @@
 // Network layer: rate-limited lookups against Semantic Scholar, CrossRef and
 // OpenAlex. Only paper titles are ever sent.
 import {
-  bestMatch, crossrefToStandard, isSamePaper, mergeMetadata, MIN_TITLE_SIM,
+  authorsNeedEnrichment, bestMatch, crossrefToStandard, isSamePaper, mergeMetadata, MIN_TITLE_SIM,
   openAlexToStandard, ssToStandard, titleSimilarity,
 } from "../lib/index.js";
 
@@ -160,9 +160,17 @@ export async function lookupPaper(title) {
   const ssMatch = await attempt(() => searchSSMatch(title));
   if (ssMatch && titleSimilarity(title, ssMatch.title || "") >= MIN_TITLE_SIM) {
     const crMatch = bestMatch((await attempt(() => searchCrossref(title))) || [], title);
-    if (crMatch && isSamePaper(ssMatch, crMatch))
-      return mergeMetadata(ssMatch, crMatch);
-    return ssMatch;
+    let merged = crMatch && isSamePaper(ssMatch, crMatch)
+      ? mergeMetadata(ssMatch, crMatch) : ssMatch;
+
+    // Avoid another request for already-complete lists. If a matched source
+    // supplies initials only, OpenAlex can often provide the authors' full
+    // display names.
+    if (authorsNeedEnrichment(merged.author)) {
+      const oaMatch = bestMatch((await attempt(() => searchOpenAlex(title))) || [], title);
+      if (oaMatch && isSamePaper(merged, oaMatch)) merged = mergeMetadata(merged, oaMatch);
+    }
+    return merged;
   }
 
   const crMatch = bestMatch((await attempt(() => searchCrossref(title))) || [], title);

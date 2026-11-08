@@ -23,7 +23,7 @@ let autoScrollEnabled = true;
 
 function buildPreviewBib() {
   const { parsedEntries, results, fieldEdits } = state;
-  return entriesToBib(buildExportEntries(parsedEntries, results, fieldEdits, getSettings()));
+  return entriesToBib(buildExportEntries(parsedEntries, results, fieldEdits, getSettings(), state.deletedEntries));
 }
 
 function buildOriginalBib() {

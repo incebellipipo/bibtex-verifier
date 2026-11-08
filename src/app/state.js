@@ -6,6 +6,7 @@ export const state = {
   results: [],
   // fieldEdits[i][field] = { action: "original" | "found" | "custom" | "remove", value }
   fieldEdits: {},
+  deletedEntries: new Set(),
   activeFilter: "all",
   activeSearch: "",
 };
@@ -14,4 +15,5 @@ export function resetRunState() {
   state.parsedEntries = [];
   state.results = [];
   state.fieldEdits = {};
+  state.deletedEntries = new Set();
 }

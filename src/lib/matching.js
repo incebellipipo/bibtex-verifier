@@ -1,5 +1,5 @@
 import { MIN_TITLE_SIM, TITLE_MATCH_THRESHOLD } from "./constants.js";
-import { extractLastNames, titleSimilarity } from "./similarity.js";
+import { extractLastNames, normalizeAuthorSet, normalizeText, titleSimilarity } from "./similarity.js";
 
 // Fields where the peer-reviewed record should win when merged with a
 // preprint version of the same paper.
@@ -7,6 +7,37 @@ const PUBLISHED_PREFERRED_FIELDS = ["year", "journal", "volume", "number", "page
 // Preprint and published versions of the same paper rarely differ by more
 // than a couple of years; allow this gap when cross-referencing sources.
 const PREPRINT_YEAR_TOLERANCE = 2;
+
+function givenNameTokens(author) {
+  const normalized = normalizeText(author);
+  return normalized.split(/\s+and\s+/).flatMap(name => {
+    const parts = name.split(",");
+    const given = parts.length > 1 ? parts.slice(1).join(" ")
+      : name.split(/\s+/).slice(0, -1).join(" ");
+    return given.match(/[a-z]+/g) || [];
+  });
+}
+
+export function authorDetailScore(author) {
+  return givenNameTokens(author).reduce(
+    (score, token) => score + (token.length === 1 ? 1 : token.length + 4), 0);
+}
+
+export function authorsNeedEnrichment(author) {
+  if (!author) return false;
+  return normalizeText(author).split(/\s+and\s+/).some(name => {
+    const parts = name.split(",");
+    const given = parts.length > 1 ? parts.slice(1).join(" ")
+      : name.split(/\s+/).slice(0, -1).join(" ");
+    const tokens = given.match(/[a-z]+/g) || [];
+    return tokens.length > 0 && tokens.every(token => token.length === 1);
+  });
+}
+
+function sameAuthorSet(a, b) {
+  const aa = normalizeAuthorSet(a), ba = normalizeAuthorSet(b);
+  return aa.size > 0 && aa.size === ba.size && [...aa].every(name => ba.has(name));
+}
 
 /**
  * True when a standard record looks like an arXiv (or similar) preprint,
@@ -55,6 +86,13 @@ export function mergeMetadata(primary, secondary) {
   for (const [k, v] of Object.entries(secondary)) {
     if (k.startsWith("_")) continue;
     if (!merged[k] && v) merged[k] = v;
+  }
+  // Author indexes frequently abbreviate given names or transliterate Nordic
+  // surnames. When both sources identify the same people, keep the list with
+  // more complete given names.
+  if (primary.author && secondary.author && sameAuthorSet(primary.author, secondary.author)
+      && authorDetailScore(secondary.author) > authorDetailScore(primary.author)) {
+    merged.author = secondary.author;
   }
   // A preprint's year is the earlier submission year, so the published
   // version wins bibliographic fields.

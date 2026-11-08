@@ -1,4 +1,5 @@
 // ─── Fuzzy matching ──────────────────────────────────────────────────
+import { stripLatex } from "./latex.js";
 // The browser loads fuzzball as a global; the fallback mirrors its default
 // token_sort_ratio so scores stay the same if the CDN script fails to load.
 
@@ -49,7 +50,10 @@ export function titleSimilarity(a, b) {
 // ─── Normalization helpers ───────────────────────────────────────────
 export function normalizeText(text) {
   if (!text) return "";
-  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  return stripLatex(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[æÆ]/g, "ae").replace(/[œŒ]/g, "oe")
+    .replace(/[øØ]/g, "o").replace(/[łŁ]/g, "l")
+    .replace(/ß/g, "ss").replace(/[ðÐ]/g, "d").replace(/[þÞ]/g, "th")
     .toLowerCase().trim().replace(/\s+/g, " ");
 }
 
@@ -72,11 +76,11 @@ export function normalizePages(p) { return p.trim().replace(/\s*-+\s*/g, "-"); }
 export function extractLastNames(authorStr) {
   if (!authorStr) return new Set();
   const names = new Set();
-  for (let part of authorStr.split(/\s+and\s+/i)) {
+  for (let part of normalizeText(authorStr).split(/\s+and\s+/i)) {
     part = part.trim();
     if (!part) continue;
-    if (part.includes(",")) names.add(part.split(",")[0].trim().toLowerCase());
-    else { const t = part.split(/\s+/); names.add(t[t.length - 1].toLowerCase()); }
+    if (part.includes(",")) names.add(part.split(",")[0].trim());
+    else { const t = part.split(/\s+/); names.add(t[t.length - 1]); }
   }
   return names;
 }

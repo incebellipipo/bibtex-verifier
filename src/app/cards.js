@@ -1,5 +1,5 @@
 // Entry cards: rendering, status/summary badges, and filter/search visibility.
-import { COMPARED_FIELDS, entryMatchesQuery, stripLatex, truncateAuthors } from "../lib/index.js";
+import { COMPARED_FIELDS, entryMatchesQuery, namesToBibtex, stripLatex, truncateAuthors } from "../lib/index.js";
 import { $, $$, esc } from "./dom.js";
 import { getSettings } from "./settings.js";
 import { state } from "./state.js";
@@ -19,14 +19,30 @@ export function statusLabel(s) {
 }
 
 const REMOVE_ICON = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+// External-link icon using the familiar Lucide/Feather box-and-arrow shape.
+const EXTERNAL_LINK_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`;
 
 export const DIFF_TABLE_HEADER = `<tr><th>Field</th><th>Your Value</th><th>Suggested</th><th></th></tr>`;
 
 export function removeFieldButton(idx, field, currentAction, title = "Remove field") {
-  return `<button class="fa-btn-x ${currentAction === "remove" ? "active" : ""}" title="${title}"
-            data-entry="${idx}" data-field="${esc(field)}" data-action="remove" data-val="">
+  return `<button type="button" class="fa-btn-x ${currentAction === "remove" ? "active" : ""}"
+            title="${title}" aria-label="${title}"
+            data-entry="${idx}" data-field="${esc(field)}" data-action="remove">
       ${REMOVE_ICON}
     </button>`;
+}
+
+const fieldText = (field, value) => ["author", "editor"].includes(field) ? namesToBibtex(value || "") : (value || "");
+
+function doiLink(value) {
+  const doi = String(value || "").trim()
+    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
+    .replace(/^doi:\s*/i, "");
+  if (!doi) return "";
+  const url = `https://doi.org/${encodeURI(doi).replace(/#/g, "%23").replace(/\?/g, "%3F")}`;
+  const hoverText = `Open DOI in a new tab: ${url}`;
+  return `<a class="doi-external-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer"
+            title="${esc(hoverText)}" aria-label="${esc(hoverText)}">${EXTERNAL_LINK_ICON}</a>`;
 }
 
 // ─── Visibility (filter + search) ────────────────────────────────────
@@ -108,7 +124,9 @@ export function updateCardStatuses() {
     const diffTable = card.querySelector(".diff-table:not(.fields-table)");
     if (diffTable) diffTable.style.display = !hasVisibleDiffs && !hasInjectedRows ? "none" : "";
     const actions = card.querySelector(".entry-actions");
-    if (actions) actions.style.display = !hasVisibleDiffs ? "none" : "";
+    if (actions) {
+      actions.querySelectorAll(".btn-accept-all, .btn-revert-all").forEach(btn => btn.hidden = !hasVisibleDiffs);
+    }
   });
 
   updateSummary();
@@ -116,6 +134,7 @@ export function updateCardStatuses() {
 
 // ─── Rendering ───────────────────────────────────────────────────────
 function renderDiffRow(r, idx, d, hasSuggestion, maxAuthors) {
+  d = { ...d, original: fieldText(d.field, d.original), found: fieldText(d.field, d.found) };
   const edits = state.fieldEdits[idx];
   const isEnrichment = !(d.original || "").trim();
   // Enrichments and "updated" entries adopt the suggestion by default.
@@ -125,7 +144,8 @@ function renderDiffRow(r, idx, d, hasSuggestion, maxAuthors) {
   const fe = edits[d.field];
   const currentAction = fe.action;
 
-  const suggestionText = currentAction === "custom" ? (fe.value || "") : (d.found || "");
+  const suggestionText = fieldText(d.field,
+    currentAction === "custom" ? fe.value : currentAction === "remove" ? fe._savedValue : d.found);
   const displaySuggestion = (d.field === "author" && maxAuthors > 0 && currentAction !== "custom")
     ? truncateAuthors(suggestionText, maxAuthors) : suggestionText;
   const authorMatchHidden = d.field === "author" && maxAuthors > 0 && displaySuggestion.trim() === (d.original || "").trim();
@@ -136,19 +156,20 @@ function renderDiffRow(r, idx, d, hasSuggestion, maxAuthors) {
       data-original-val="${encodeURIComponent(d.original || "")}">
       <td class="field-name"><span class="field-name-pill">${esc(d.field)}</span></td>
       <td class="val-col val-col-original">
-        ${!isEnrichment ? `<button class="choice-pill pill-original ${currentAction === "original" ? "active" : ""}"
+        ${`<button class="choice-pill pill-original ${isEnrichment ? "pill-none" : ""} ${currentAction === "original" ? "active" : ""} ${currentAction === "remove" ? "removed" : ""}"
                 data-entry="${idx}" data-field="${esc(d.field)}" data-action="original" data-val="${esc(d.original || "")}"
-                title="Keep your value">${esc(d.original)}</button>` : '<span class="empty-val">\u2014</span>'}
+                title="${isEnrichment ? "Do not add this field" : "Keep your value"}">${isEnrichment ? '<code class="none-label">None</code>' : esc(d.original)}</button>`}
       </td>
       <td class="val-col val-col-suggested">
-        ${hasSuggestion ? `<span class="choice-pill pill-suggested ${currentAction === "found" || currentAction === "custom" ? "active" : ""} ${currentAction === "remove" ? "removed" : ""}"
+        ${hasSuggestion ? `<span class="suggested-value-wrap ${d.field === "doi" ? "has-doi-link" : ""}"><span class="choice-pill pill-suggested ${currentAction === "found" || currentAction === "custom" ? "active" : ""} ${currentAction === "remove" ? "removed" : ""}"
                 contenteditable="${currentAction === "remove" ? "false" : "true"}"
                 spellcheck="false"
                 data-entry="${idx}" data-field="${esc(d.field)}" data-action="found" data-val="${esc(d.found || "")}"
-                title="Use suggested value (click to select, edit to customize)">${esc(displaySuggestion)}</span>` : ""}
+                title="Use suggested value (click to select, edit to customize)">${esc(displaySuggestion)}</span>
+                ${d.field === "doi" ? doiLink(d.found) : ""}</span>` : ""}
       </td>
       <td class="field-actions-mini">
-        ${removeFieldButton(idx, d.field, currentAction, isEnrichment ? "Don\u2019t add" : "Remove field")}
+        ${removeFieldButton(idx, d.field, currentAction, isEnrichment ? "Remove suggested field" : "Remove field")}
       </td>
     </tr>`;
 }
@@ -164,12 +185,45 @@ function renderPlainFieldRow(idx, f, entry) {
       <td class="val-col" colspan="2">
         <span class="choice-pill pill-value ${removed ? "removed" : "active"}"
               contenteditable="${removed ? "false" : "true"}" spellcheck="false"
-              data-entry="${idx}" data-field="${esc(f)}">${esc(removed ? "" : fe.value)}</span>
+              data-entry="${idx}" data-field="${esc(f)}">${esc(fieldText(f, removed ? fe._savedValue : fe.value))}</span>
       </td>
       <td class="field-actions-mini">
         ${removeFieldButton(idx, f, fe.action)}
       </td>
     </tr>`;
+}
+
+function fieldsSectionHTML(rows, count, hasDiffs) {
+  return `<div class="fields-toggle-wrap collapsed">
+    <button class="fields-toggle-btn" type="button">
+      <svg class="fields-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+      ${hasDiffs ? "Other fields" : "Fields"} (<span class="fields-count">${count}</span>)
+    </button>
+    <table class="diff-table fields-table">
+      <tr><th>Field</th><th colspan="2">Value</th><th></th></tr>
+      ${rows}
+    </table>
+  </div>`;
+}
+
+export function appendAddedFieldRow(card, idx, field) {
+  let wrap = card.querySelector(".fields-toggle-wrap");
+  if (!wrap) {
+    const hasDiffs = card.querySelector(".diff-table:not(.fields-table)") !== null;
+    card.querySelector(".entry-actions").insertAdjacentHTML(
+      "beforebegin",
+      fieldsSectionHTML(renderPlainFieldRow(idx, field, state.parsedEntries[idx]), 1, hasDiffs),
+    );
+    wrap = card.querySelector(".fields-toggle-wrap");
+  } else {
+    wrap.querySelector(".fields-table").insertAdjacentHTML(
+      "beforeend",
+      renderPlainFieldRow(idx, field, state.parsedEntries[idx]),
+    );
+    const count = wrap.querySelectorAll(".field-row-plain").length;
+    wrap.querySelector(".fields-count").textContent = count;
+  }
+  wrap.classList.remove("collapsed");
 }
 
 function renderHints(r) {
@@ -219,6 +273,7 @@ function renderSearchLinks(title) {
 
 export function renderEntryCard(r) {
   const idx = r.index;
+  if (state.deletedEntries.has(idx)) return;
   const entry = state.parsedEntries[idx];
   if (!state.fieldEdits[idx]) state.fieldEdits[idx] = {};
 
@@ -243,19 +298,16 @@ export function renderEntryCard(r) {
   }
 
   const diffFields = new Set((r.field_diffs || []).map(d => d.field));
-  const extraFields = ["title", ...COMPARED_FIELDS].filter(f => !diffFields.has(f) && (entry[f] || "").trim());
+  const addedFields = Object.entries(state.fieldEdits[idx])
+    .filter(([field, edit]) => edit?._added && !diffFields.has(field))
+    .map(([field]) => field);
+  const extraFields = [...new Set([
+    ...["title", ...COMPARED_FIELDS].filter(f => !diffFields.has(f) && (entry[f] || "").trim()),
+    ...addedFields,
+  ])];
   if (extraFields.length) {
     const extraRows = extraFields.map(f => renderPlainFieldRow(idx, f, entry)).join("");
-    diffHTML += `<div class="fields-toggle-wrap collapsed">
-      <button class="fields-toggle-btn" type="button">
-        <svg class="fields-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-        ${hasDiffs ? "Other fields" : "Fields"} (${extraFields.length})
-      </button>
-      <table class="diff-table fields-table">
-        <tr><th>Field</th><th colspan="2">Value</th><th></th></tr>
-        ${extraRows}
-      </table>
-    </div>`;
+    diffHTML += fieldsSectionHTML(extraRows, extraFields.length, hasDiffs);
   }
 
   let actionsHTML = "";
@@ -272,8 +324,29 @@ export function renderEntryCard(r) {
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
         Keep original
       </button>
+      <button type="button" class="seg-btn btn-add-field" data-entry="${idx}">+ Add field</button>
+      <button type="button" class="seg-btn btn-delete-entry" data-entry="${idx}">Delete</button>
+    </div>`;
+  } else {
+    actionsHTML = `<div class="entry-actions">
+      <button type="button" class="seg-btn btn-add-field" data-entry="${idx}">+ Add field</button>
+      <button type="button" class="seg-btn btn-delete-entry" data-entry="${idx}">Delete</button>
     </div>`;
   }
+
+  const addFieldForm = `<form class="add-field-form" data-entry="${idx}" hidden>
+    <label>
+      <span>Field name</span>
+      <input class="add-field-name" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="e.g. keywords">
+    </label>
+    <label class="add-field-value-label">
+      <span>Value</span>
+      <input class="add-field-value" type="text" autocomplete="off" spellcheck="false" placeholder="Field value">
+    </label>
+    <button type="submit" class="add-field-submit">Add</button>
+    <button type="button" class="add-field-cancel">Cancel</button>
+    <div class="add-field-error" role="alert" aria-live="polite"></div>
+  </form>`;
 
   const jumpBtn = `<button class="btn-jump-preview" type="button" data-entry-id="${esc(r.entry_id)}" title="Scroll to this entry in the live preview">
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
@@ -292,7 +365,7 @@ export function renderEntryCard(r) {
         <span class="status-tag tag-${r.status}">${statusLabel(r.status)}</span>
       </div>
     </div>
-  </div>${renderHints(r)}${diffHTML}${actionsHTML}${renderSearchLinks(r.title)}`;
+  </div>${renderHints(r)}${diffHTML}${actionsHTML}${addFieldForm}${renderSearchLinks(r.title)}`;
 
   applyCardVisibility(card);
   // The retry pass re-renders a card in place so it keeps its position.

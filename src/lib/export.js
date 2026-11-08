@@ -1,4 +1,4 @@
-import { normalizeTitle } from "./latex.js";
+import { namesToBibtex, normalizeTitle } from "./latex.js";
 import { cleanEntryNotes } from "./notes.js";
 
 export function truncateAuthors(authorStr, max) {
@@ -17,6 +17,7 @@ function applyFieldEdits(entry, edits) {
     if (!fe) continue;
     if (fe.action === "found" || fe.action === "custom") {
       if (fe.value) out[field] = fe.value;
+      else if (fe.action === "custom") delete out[field];
     } else if (fe.action === "remove") {
       delete out[field];
     }
@@ -38,9 +39,10 @@ function dedupKey(entry, dedupBy) {
  * `fieldEdits[i][field]` is `{ action: "original" | "found" | "custom" | "remove", value }`.
  * `settings` is `{ removeDuplicates, dedupBy, removeNotFound, cleanNotes, maxAuthors, preferPublished }`.
  */
-export function buildExportEntries(entries, results, fieldEdits, settings) {
+export function buildExportEntries(entries, results, fieldEdits, settings, deletedEntries = new Set()) {
   const s = settings;
   let final = entries.slice(0, results.length).map((entry, i) => {
+    if (deletedEntries.has(i)) return null;
     const r = results[i];
     if (!r) return { ...entry };
     if (s.removeNotFound && r.status === "not_found") return null;
@@ -58,6 +60,9 @@ export function buildExportEntries(entries, results, fieldEdits, settings) {
         if (out.journal) out.journal = foundVenue;
         else if (out.booktitle) out.booktitle = foundVenue;
       }
+    }
+    for (const field of ["author", "editor"]) {
+      if (out[field]) out[field] = namesToBibtex(out[field]);
     }
     return s.cleanNotes ? cleanEntryNotes(out) : out;
   }).filter(Boolean);

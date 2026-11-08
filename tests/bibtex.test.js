@@ -10,9 +10,16 @@ describe("stripLatex", () => {
     assert.equal(stripLatex("\\~n"), "ñ");
   });
 
+  it("decodes the braced ASCII forms used for names", () => {
+    assert.equal(stripLatex(String.raw`M{\'e}ndez`), "Méndez");
+    assert.equal(stripLatex(String.raw`M{\"u}ller`), "Müller");
+    assert.equal(stripLatex(String.raw`{\L}ukasz and S{\o}ren`), "Łukasz and Søren");
+  });
+
   it("removes LaTeX commands", () => {
     assert.equal(stripLatex("\\textbf{bold}"), "bold");
     assert.equal(stripLatex("\\emph{text}"), "text");
+    assert.equal(stripLatex("\\url{example.com}"), "example.com");
   });
 
   it("removes braces", () => {

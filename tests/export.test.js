@@ -81,6 +81,14 @@ describe("buildExportEntries", () => {
     assert.equal(entries[0].journal, "Old", "input entries are not mutated");
   });
 
+  it("adds a new custom field", () => {
+    const out = buildExportEntries(entries, results, {
+      0: { keywords: { action: "custom", value: "verification, bibliography", _added: true } },
+    }, DEFAULT_SETTINGS);
+    assert.equal(out[0].keywords, "verification, bibliography");
+    assert.ok(!("keywords" in entries[0]), "input entries are not mutated");
+  });
+
   it("only exports entries that have a result so far", () => {
     assert.equal(buildExportEntries(entries, results.slice(0, 2), {}, DEFAULT_SETTINGS).length, 2);
   });
@@ -134,5 +142,26 @@ describe("diffLines", () => {
   it("handles empty inputs", () => {
     assert.deepEqual(diffLines([], ["a"]), [{ type: "add", text: "a" }]);
     assert.deepEqual(diffLines(["a"], []), [{ type: "del", text: "a" }]);
+  });
+});
+
+describe("entry deletion and absent original values", () => {
+  it("excludes deleted entries without shifting field edits for later entries", () => {
+    const entries = [{ ID: "a", year: "2020" }, { ID: "b", year: "2021" }];
+    const results = entries.map(() => ({ status: "verified" }));
+    const edits = { 1: { year: { action: "custom", value: "2025" } } };
+    const out = buildExportEntries(entries, results, edits, DEFAULT_SETTINGS, new Set([0]));
+    assert.deepEqual(out, [{ ID: "b", year: "2025" }]);
+    assert.equal(buildExportEntries(entries, results, edits, DEFAULT_SETTINGS, new Set([0, 1])).length, 0);
+    assert.equal(entries.length, 2);
+  });
+
+  it("keeps an absent field absent when None is selected", () => {
+    const entry = { ID: "a", title: "Paper" };
+    const results = [{ status: "updated", suggested: { doi: "10.1/example" } }];
+    const out = buildExportEntries([entry], results, {
+      0: { doi: { action: "original", value: "" } },
+    }, DEFAULT_SETTINGS);
+    assert.deepEqual(out, [entry]);
   });
 });

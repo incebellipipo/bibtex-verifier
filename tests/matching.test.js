@@ -1,7 +1,9 @@
 import "./helpers/setup.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { bestMatch, isPreprint, isSamePaper, mergeMetadata } from "../src/lib/index.js";
+import {
+  authorDetailScore, authorsNeedEnrichment, bestMatch, isPreprint, isSamePaper, mergeMetadata,
+} from "../src/lib/index.js";
 
 describe("isSamePaper", () => {
   it("same paper returns true", () => {
@@ -66,6 +68,18 @@ describe("mergeMetadata", () => {
     assert.equal(merged.year, "2021", "published year should win");
     assert.equal(merged.journal, "NeurIPS", "published venue should win");
     assert.equal(merged.doi, "10.1/x");
+  });
+
+  it("keeps the richer author list when both sources identify the same people", () => {
+    const abbreviated = String.raw`Brodtkorb, Astrid H. and Vaerno, Svenn Are and Teel, A. and S{\o}rensen, A. and Skjetne, R.`;
+    const complete = String.raw`Brodtkorb, Astrid H. and V{\ae}rn{\o}, Svenn Are and Teel, Andrew R. and S{\o}rensen, Asgeir J. and Skjetne, Roger`;
+    const merged = mergeMetadata(
+      { title: "Hybrid controller concept", author: abbreviated, _source: "ss" },
+      { title: "Hybrid controller concept", author: complete, _source: "oa" });
+    assert.equal(merged.author, complete);
+    assert.ok(authorDetailScore(complete) > authorDetailScore(abbreviated));
+    assert.equal(authorsNeedEnrichment(abbreviated), true);
+    assert.equal(authorsNeedEnrichment(complete), false);
   });
 });
 

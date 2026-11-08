@@ -2,7 +2,7 @@
 
 # BibTeX Verifier
 
-**Stop fixing citations by hand.** Paste or upload your `.bib`, compare every entry against real publications, and leave with a bibliography you trust — including catching **AI-hallucinated** references before they ship.
+**Stop fixing citations by hand.** Paste or upload your `.bib`, compare every entry against real publications, and leave with a bibliography you trust -- including catching **AI-hallucinated** references before they ship.
 
 [![Live app](https://img.shields.io/badge/Try_it_live-merfanian.github.io-5b8def?style=for-the-badge)](https://merfanian.github.io/Bibtex-Verifier/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](LICENSE)
@@ -17,14 +17,14 @@
 </a>
 
 <p align="center">
-  <sub><strong>Multi-source verification</strong> · hallucination detection · field-level corrections · one-click export</sub>
+  <sub><strong>Multi-source verification</strong> | hallucination detection | field-level corrections | one-click export</sub>
 </p>
 
 <br/>
 
 </div>
 
-Runs **100% in your browser** — no install, no server, no account. Only paper titles are sent to public APIs ([Semantic Scholar](https://www.semanticscholar.org/), [CrossRef](https://www.crossref.org/), and [OpenAlex](https://openalex.org/) as a fallback); your `.bib` never leaves your machine.
+Runs **100% in your browser** -- no install, no server, no account. Only paper titles are sent to public APIs ([Semantic Scholar](https://www.semanticscholar.org/), [CrossRef](https://www.crossref.org/), and [OpenAlex](https://openalex.org/) as a fallback); your `.bib` never leaves your machine.
 
 ---
 
@@ -33,8 +33,8 @@ Runs **100% in your browser** — no install, no server, no account. Only paper 
 | Pain | What BibTeX Verifier does |
 |------|---------------------------|
 | ChatGPT invented three papers | Flags **no-match** / weak-match titles so you delete hallucinations |
-| Google Scholar tab × 80 | **Batch lookup** with adaptive rate limiting |
-| “Is this venue name right?” | **Side-by-side** your value vs. database suggestion, accept per field |
+| Google Scholar tab x 80 | **Batch lookup** with adaptive rate limiting |
+| "Is this venue name right?" | **Side-by-side** your value vs. database suggestion, accept per field |
 | Overleaf paste chaos | **Paste** directly or upload; **download** a clean `.bib` when done |
 
 ---
@@ -43,26 +43,29 @@ Runs **100% in your browser** — no install, no server, no account. Only paper 
 
 - **Drag-and-drop** or **paste** BibTeX from Overleaf
 - **Multi-source** checks (Semantic Scholar + CrossRef, with OpenAlex fallback)
-- **Hallucination detection** — titles that don’t exist in major indexes
-- **Pill-style diffs** — choose your text vs. suggested metadata per field
+- **Hallucination detection** -- titles that don't exist in major indexes
+- **Pill-style diffs** -- choose your text or edit suggested metadata directly. Changes update the live preview and export.
+- **Entry and field deletion** -- use **Delete** beside the bulk actions to remove an entry, or **X** on a field to omit that key from export. Choose monospace **None** to decline a suggested field with no original value.
+- **Custom fields** -- add a new BibTeX key and value directly to any entry; it appears immediately in the preview and export.
+- **BibTeX name encoding** -- author and editor accents appear in editable fields and export as ASCII LaTeX (for example, `M{\'e}ndez`); existing LaTeX is preserved. Unsupported characters stay unchanged.
 - **Live BibTeX preview** with diff highlighting; **copy** or **download** the final file
 - **Max authors** truncation for long author lists (plus peer-reviewed venue preference, dedup, optional filters)
-- **Clean notes** — strip reference-manager bookkeeping (`Read_Status`, `ZSCC`, …) from `note` / `annote`
+- **Clean notes** -- strip reference-manager bookkeeping (`Read_Status`, `ZSCC`, ...) from `note` / `annote`
 - **Dark / light** theme
-- **Quick search shortcuts** on each card (Scholar, CrossRef, DBLP, …)
+- **Quick search shortcuts** on each card (Scholar, CrossRef, DBLP, ...)
 
 ---
 
 ## How it works
 
 ```
-Upload or paste .bib → Parse entries → For each entry:
-    Semantic Scholar match → CrossRef enrich → OpenAlex fallback
-→ Compare fields → Verified / Auto-updated / Needs review / Not found
-→ You edit choices → Export corrected .bib
+Upload or paste .bib -> Parse entries -> For each entry:
+    Semantic Scholar match -> CrossRef enrich -> OpenAlex fallback
+-> Compare fields -> Verified / Auto-updated / Needs review / Not found
+-> You edit choices -> Export corrected .bib
 ```
 
-**Statuses:** **Verified** (matches online record) · **Auto-updated** (same paper, metadata differs) · **Needs review** (weak title match — possible typo or fake cite) · **Not found** (no index hit).
+**Statuses:** **Verified** (matches online record) | **Auto-updated** (same paper, metadata differs) | **Needs review** (weak title match -- possible typo or fake cite) | **Not found** (no index hit).
 
 ---
 
@@ -89,7 +92,7 @@ Open the URL shown (often `http://localhost:3000`). Any static server works; the
 | Path | Role |
 |------|------|
 | `src/` | The static app deployed to GitHub Pages: `index.html`, `style.css` |
-| `src/lib/` | Pure logic (parsing, matching, comparison, export) — no DOM, no network |
+| `src/lib/` | Pure logic (parsing, matching, comparison, export) -- no DOM, no network |
 | `src/app/` | Browser UI and network code (ES modules, entry point `main.js`) |
 | `tests/` | Node tests (`npm test`) |
 | `.github/workflows/` | CI + Pages deploy |
@@ -98,15 +101,15 @@ Open the URL shown (often `http://localhost:3000`). Any static server works; the
 
 ## Limitations
 
-- **API rate limits** — large files take a few minutes; the app throttles politely.
-- **Not everything is indexed** — some workshops, theses, or brand-new papers won’t appear.
-- **Metadata isn’t perfect** — you always get the final say in the diff UI.
+- **API rate limits** -- large files take a few minutes; the app throttles politely.
+- **Not everything is indexed** -- some workshops, theses, or brand-new papers won't appear.
+- **Metadata isn't perfect** -- you always get the final say in the diff UI.
 
 ---
 
 ## Contributing
 
-Issues and PRs welcome — extra APIs, BibLaTeX edge cases, UX polish, etc. See [CONTRIBUTING.md](CONTRIBUTING.md) for the project layout, how to run tests (`npm test`), and the fork-and-PR flow.
+Issues and PRs welcome -- extra APIs, BibLaTeX edge cases, UX polish, etc. See [CONTRIBUTING.md](CONTRIBUTING.md) for the project layout, how to run tests (`npm test`), and the fork-and-PR flow.
 
 ---
 

@@ -31,6 +31,21 @@ describe("compareAuthors", () => {
     assert.equal(compareAuthors("Vaswani, Ashish and Shazeer, Noam", "Ashish Vaswani and Noam Shazeer"), 100);
   });
 
+  it("matches Unicode and ASCII LaTeX spellings of accented names", () => {
+    assert.equal(compareAuthors("Méndez, Ana and Müller, Jörg", String.raw`M{\'e}ndez, Ana and M{\"u}ller, J{\"o}rg`), 100);
+    assert.equal(compareAuthors("Łukasz Kowalski", String.raw`{\L}ukasz Kowalski`), 100);
+  });
+
+  it("does not replace a complete list with romanized surnames and initials", () => {
+    const complete = String.raw`Brodtkorb, Astrid H and V{\ae}rn{\o}, Svenn Are and Teel, Andrew R and S{\o}rensen, Asgeir J and Skjetne, Roger`;
+    const abbreviated = String.raw`Brodtkorb, Astrid H. and Vaerno, Svenn Are and Teel, A. and S{\o}rensen, A. and Skjetne, R.`;
+    assert.equal(compareAuthors(complete, abbreviated), 100);
+    const result = compareEntry(
+      { title: "Hybrid controller concept", author: complete },
+      { title: "Hybrid controller concept", author: abbreviated });
+    assert.ok(!result.field_diffs.some(diff => diff.field === "author"));
+  });
+
   it("no overlap scores 0", () => {
     assert.equal(compareAuthors("Smith, John", "Doe, Jane"), 0);
   });

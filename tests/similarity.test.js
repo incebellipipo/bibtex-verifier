@@ -57,6 +57,12 @@ describe("normalizeText", () => {
     assert.equal(normalizeText("René Descartes"), "rene descartes");
   });
 
+  it("folds Nordic letters and their LaTeX forms", () => {
+    assert.equal(normalizeText(String.raw`V{\ae}rn{\o}`), "vaerno");
+    assert.equal(normalizeText("Værnø"), "vaerno");
+    assert.equal(normalizeText(String.raw`S{\o}rensen`), "sorensen");
+  });
+
   it("collapses whitespace", () => {
     assert.equal(normalizeText("  hello   world  "), "hello world");
   });
