@@ -80,23 +80,24 @@
       </div>
     </header>
 
-    <div class="input-tabs">
-      <button class="input-tab active" data-tab="paste">Paste BibTeX</button>
-      <button class="input-tab" data-tab="upload">Upload file</button>
-    </div>
+    <div class="input-panel">
+      <div class="input-sources">
+        <section class="input-source input-source-paste" aria-labelledby="paste-heading">
+          <h2 id="paste-heading">Paste BibTeX</h2>
+          <textarea id="bib-paste" class="bib-textarea" placeholder="Paste your BibTeX content here, e.g. from Overleaf...&#10;&#10;@article{example2024,&#10;  title={Your Paper Title},&#10;  author={Author, First and Author, Second},&#10;  year={2024},&#10;  journal={Some Journal}&#10;}"></textarea>
+        </section>
 
-    <div class="tab-panel active" id="tab-paste">
-      <textarea id="bib-paste" class="bib-textarea" placeholder="Paste your BibTeX content here, e.g. from Overleaf...&#10;&#10;@article{example2024,&#10;  title={Your Paper Title},&#10;  author={Author, First and Author, Second},&#10;  year={2024},&#10;  journal={Some Journal}&#10;}"></textarea>
-      <button class="btn-verify-paste" id="btn-verify-paste">Verify pasted BibTeX</button>
-    </div>
-
-    <div class="tab-panel" id="tab-upload">
-      <div class="upload-zone">
-        <span class="icon">&#128462;</span>
-        <span class="label">Drop your .bib file here or click to browse</span>
-        <p>Standard BibTeX &amp; BibLaTeX &middot; Processed entirely in your browser</p>
-        <input type="file" id="file-input" accept=".bib" />
+        <section class="input-source input-source-upload" aria-labelledby="upload-heading">
+          <h2 id="upload-heading">Drop a .bib file</h2>
+          <label class="upload-zone" for="file-input">
+            <span class="icon">&#128462;</span>
+            <span class="label">Drop your .bib file here or click to browse</span>
+            <p class="upload-status" aria-live="polite">Its contents will appear in the editor beside this area.</p>
+            <input type="file" id="file-input" accept=".bib" />
+          </label>
+        </section>
       </div>
+      <button class="btn-verify" id="btn-verify">Verify BibTeX</button>
     </div>
 
     <div class="results-section">
@@ -260,7 +261,7 @@
       </details>
       <details>
         <summary>Does it work with Overleaf?</summary>
-        <p>Yes! You can copy your entire <code>.bib</code> file from Overleaf and paste it directly into the "Paste BibTeX" tab. After reviewing, download the corrected file and upload it back to Overleaf.</p>
+        <p>Yes! You can copy your entire <code>.bib</code> file from Overleaf and paste it into the editor. After reviewing, download the corrected file and upload it back to Overleaf.</p>
       </details>
       <details>
         <summary>Is this open source?</summary>

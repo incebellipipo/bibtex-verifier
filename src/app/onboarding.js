@@ -1,6 +1,6 @@
 // First-visit onboarding tour, and the follow-up tour shown after the sample run.
 import { $ } from "./dom.js";
-import { bibPaste, switchToPasteTab } from "./input.js";
+import { bibPaste, focusBibtexInput } from "./input.js";
 import { setSettingsOpen } from "./settings.js";
 
 const ONBOARDING_STORAGE = "bv-onboarding-dismissed";
@@ -76,28 +76,27 @@ const introOnboardingSteps = [
   },
   {
     title: "Add your bibliography",
-    body: "Upload a <strong>.bib</strong> file or switch to <strong>Paste BibTeX</strong> and paste from Overleaf or anywhere else.",
-    target: ".input-tabs",
+    body: "Paste from Overleaf in the editor or drop a <strong>.bib</strong> file beside it. A dropped file is loaded into the same editor so you can review it first.",
+    target: ".input-sources",
   },
   {
     title: "Sample loaded",
-    body: "We’ve switched to the paste tab and inserted a tiny <strong>two-entry sample</strong>: one famous paper with intentional wrong venue text, and one fake title so you can see how mismatches look.",
+    body: "We’ve inserted a tiny <strong>two-entry sample</strong>: one famous paper with intentional wrong venue text, and one fake title so you can see how mismatches look.",
     target: "#bib-paste",
     onEnter: () => {
-      switchToPasteTab();
       bibPaste.value = ONBOARDING_SAMPLE_BIB;
-      bibPaste.focus({ preventScroll: true });
+      focusBibtexInput();
     },
   },
   {
     title: "Run verification",
-    body: "Click <strong>Verify pasted BibTeX</strong> when you’re ready. The app queries DataCite for supplied DOIs, then Semantic Scholar, CrossRef, and OpenAlex by title. <strong>When it finishes, the tour continues</strong> and walks through the results.",
-    target: "#btn-verify-paste",
+    body: "Click <strong>Verify BibTeX</strong> when you’re ready. The app queries DataCite for supplied DOIs, then Semantic Scholar, CrossRef, and OpenAlex by title. <strong>When it finishes, the tour continues</strong> and walks through the results.",
+    target: "#btn-verify",
   },
   {
     title: "Start with the sample",
     body: "Use <strong>Verify sample &amp; explore</strong> below to run the demo (same as the real verify button). Or close the tour and paste your own .bib anytime.",
-    target: "#btn-verify-paste",
+    target: "#btn-verify",
     final: true,
   },
 ];
@@ -256,7 +255,6 @@ function mountOnboardingTour(steps, variant = "intro") {
       pendingResumeClick = true;
       closeOnboarding();
       if (!bibPaste.value.trim()) bibPaste.value = ONBOARDING_SAMPLE_BIB;
-      switchToPasteTab();
       startVerification(bibPaste.value.trim(), "Parsing pasted content...");
     }
   });
