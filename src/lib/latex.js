@@ -1,3 +1,5 @@
+import { NAME_FIELDS } from "./constants.js";
+
 const LATEX_ACCENT_MAP = {
   "\\'a":"á", "\\'e":"é", "\\'i":"í", "\\'o":"ó", "\\'u":"ú",
   "\\`a":"à", "\\`e":"è", "\\`i":"ì", "\\`o":"ò", "\\`u":"ù",
@@ -50,6 +52,21 @@ const BIBTEX_LETTERS = {
   'ð': '{\\dh}', 'Ð': '{\\DH}', 'þ': '{\\th}', 'Þ': '{\\TH}',
   'ı': '{\\i}',
 };
+
+/**
+ * A field value as written to BibTeX: name lists get BibTeX accent commands,
+ * other fields are returned as-is. Missing values become "".
+ */
+export function fieldToBibtex(field, value) {
+  return NAME_FIELDS.includes(field) ? namesToBibtex(value || "") : (value || "");
+}
+
+/** A copy of `entry` with its name fields written with BibTeX accents. */
+export function encodeEntryNames(entry) {
+  const out = { ...entry };
+  for (const field of NAME_FIELDS) if (out[field]) out[field] = namesToBibtex(out[field]);
+  return out;
+}
 
 export function namesToBibtex(text) {
   if (!text) return text;

@@ -1,18 +1,6 @@
 import { compareEntry, fieldDiffsForNeedsReview } from "./compare.js";
+import { normalizeDoi, sameDoi } from "./doi.js";
 import { normalizeTitle } from "./latex.js";
-
-function normalizedDoi(value) {
-  return String(value || "").trim().toLowerCase()
-    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//, "")
-    .replace(/^doi:\s*/, "");
-}
-
-function isDoiSourceVerified(entry, found, source) {
-  const sources = String(found?._source || "").split("+");
-  const entryDoi = normalizedDoi(entry.doi);
-  const foundDoi = normalizedDoi(found?.doi);
-  return sources.includes(source) && !!entryDoi && entryDoi === foundDoi;
-}
 
 const SOURCE_LABELS = {
   doi_org: "DOI.org",
@@ -21,12 +9,15 @@ const SOURCE_LABELS = {
   crossref: "CrossRef",
   openalex: "OpenAlex",
 };
+// DOI providers only count as verifying an entry when they confirm its own DOI.
+const DOI_SOURCES = new Set(["doi_org", "datacite"]);
 
-function verificationSources(found, verifiedDoiSources) {
+/** Labels of the sources behind `found` that verify `entry`, without duplicates. */
+function verificationSources(entry, found) {
   const sources = String(found?._source || "").split("+");
   return [...new Set(sources
     .filter(source => SOURCE_LABELS[source]
-      && (!["doi_org", "datacite"].includes(source) || verifiedDoiSources.has(source)))
+      && (!DOI_SOURCES.has(source) || sameDoi(entry.doi, found.doi)))
     .map(source => SOURCE_LABELS[source]))];
 }
 
@@ -36,7 +27,7 @@ export function isOnlineSource(entry) {
 }
 
 export function isOnlineOnlyEntry(entry) {
-  return isOnlineSource(entry) && !normalizedDoi(entry?.doi);
+  return isOnlineSource(entry) && !normalizeDoi(entry?.doi);
 }
 
 /**
@@ -102,12 +93,6 @@ export function groupDuplicateResultIndices(results) {
 export function buildResult(entry, index, found, duplicateOf = null) {
   let status = "not_found", titleScore = 0, fieldDiffs = [], suggested = {};
   const onlineSource = isOnlineSource(entry);
-  const dataCiteVerified = isDoiSourceVerified(entry, found, "datacite");
-  const doiOrgVerified = isDoiSourceVerified(entry, found, "doi_org");
-  const verifiedDoiSources = new Set([
-    ...(dataCiteVerified ? ["datacite"] : []),
-    ...(doiOrgVerified ? ["doi_org"] : []),
-  ]);
   if (found) {
     const cmp = compareEntry(entry, found);
     status = cmp.status;
@@ -129,12 +114,9 @@ export function buildResult(entry, index, found, duplicateOf = null) {
     field_diffs: fieldDiffs,
     suggested,
     found_title: found ? (found.title || "") : "",
-    online_source: onlineSource,
     online_url: onlineSource ? entry.url : "",
     online_manual_review: onlineSource && !found,
-    verified_by_datacite: dataCiteVerified,
-    verified_by_doi_org: doiOrgVerified,
-    verification_sources: verificationSources(found, verifiedDoiSources),
+    verification_sources: verificationSources(entry, found),
     // Retained in memory so a raw-text edit can be compared again without
     // another network request. Internal keys are never written to BibTeX.
     _found: found || null,

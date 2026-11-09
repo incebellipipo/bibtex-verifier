@@ -11,4 +11,6 @@ export * from "./notes.js";
 export * from "./search.js";
 export * from "./results.js";
 export * from "./export.js";
+export * from "./field-edits.js";
 export * from "./diff.js";
+export * from "./doi.js";

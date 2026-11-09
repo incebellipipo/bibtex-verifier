@@ -8,9 +8,9 @@ const PUBLISHED_PREFERRED_FIELDS = ["year", "journal", "volume", "number", "page
 // than a couple of years; allow this gap when cross-referencing sources.
 const PREPRINT_YEAR_TOLERANCE = 2;
 
-function givenNameTokens(author) {
-  const normalized = normalizeText(author);
-  return normalized.split(/\s+and\s+/).flatMap(name => {
+/** Given-name tokens of each author, from "Last, Given" or "Given Last" form. */
+function givenNamesPerAuthor(author) {
+  return normalizeText(author).split(/\s+and\s+/).map(name => {
     const parts = name.split(",");
     const given = parts.length > 1 ? parts.slice(1).join(" ")
       : name.split(/\s+/).slice(0, -1).join(" ");
@@ -19,19 +19,15 @@ function givenNameTokens(author) {
 }
 
 export function authorDetailScore(author) {
-  return givenNameTokens(author).reduce(
+  return givenNamesPerAuthor(author).flat().reduce(
     (score, token) => score + (token.length === 1 ? 1 : token.length + 4), 0);
 }
 
+/** True when some author is listed with initials only. */
 export function authorsNeedEnrichment(author) {
   if (!author) return false;
-  return normalizeText(author).split(/\s+and\s+/).some(name => {
-    const parts = name.split(",");
-    const given = parts.length > 1 ? parts.slice(1).join(" ")
-      : name.split(/\s+/).slice(0, -1).join(" ");
-    const tokens = given.match(/[a-z]+/g) || [];
-    return tokens.length > 0 && tokens.every(token => token.length === 1);
-  });
+  return givenNamesPerAuthor(author).some(tokens =>
+    tokens.length > 0 && tokens.every(token => token.length === 1));
 }
 
 function sameAuthorSet(a, b) {

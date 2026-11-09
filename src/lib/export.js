@@ -1,4 +1,6 @@
-import { namesToBibtex, normalizeTitle } from "./latex.js";
+import { normalizeDoi } from "./doi.js";
+import { applyFieldEdits } from "./field-edits.js";
+import { encodeEntryNames, normalizeTitle } from "./latex.js";
 import { cleanEntryNotes } from "./notes.js";
 
 export function truncateAuthors(authorStr, max) {
@@ -11,22 +13,8 @@ export function truncateAuthors(authorStr, max) {
 const isPreprintVenue = (venue) =>
   venue.includes("arxiv") || venue.includes("preprint") || venue.includes("corr");
 
-export function applyFieldEdits(entry, edits) {
-  const out = { ...entry };
-  for (const [field, fe] of Object.entries(edits || {})) {
-    if (!fe) continue;
-    if (fe.action === "found" || fe.action === "custom") {
-      if (fe.value) out[field] = fe.value;
-      else if (fe.action === "custom") delete out[field];
-    } else if (fe.action === "remove") {
-      delete out[field];
-    }
-  }
-  return out;
-}
-
 function dedupKey(entry, dedupBy) {
-  if (dedupBy === "doi") return (entry.doi || "").toLowerCase().trim();
+  if (dedupBy === "doi") return normalizeDoi(entry.doi).toLowerCase();
   if (dedupBy === "id") return (entry.ID || "").toLowerCase().trim();
   return normalizeTitle(entry.title || "");
 }
@@ -36,7 +24,7 @@ function dedupKey(entry, dedupBy) {
  * (`results[i]` belongs to `entries[i]`), the user's per-field choices, and
  * the download settings.
  *
- * `fieldEdits[i][field]` is `{ action: "original" | "found" | "custom" | "remove", value }`.
+ * `fieldEdits[i][field]` is an edit record (see field-edits.js).
  * `settings` is `{ removeDuplicates, dedupBy, removeNotFound, cleanNotes, maxAuthors, preferPublished }`.
  */
 export function buildExportEntries(entries, results, fieldEdits, settings, deletedEntries = new Set()) {
@@ -61,10 +49,8 @@ export function buildExportEntries(entries, results, fieldEdits, settings, delet
         else if (out.booktitle) out.booktitle = foundVenue;
       }
     }
-    for (const field of ["author", "editor"]) {
-      if (out[field]) out[field] = namesToBibtex(out[field]);
-    }
-    return s.cleanNotes ? cleanEntryNotes(out) : out;
+    const encoded = encodeEntryNames(out);
+    return s.cleanNotes ? cleanEntryNotes(encoded) : encoded;
   }).filter(Boolean);
 
   if (s.removeDuplicates) {

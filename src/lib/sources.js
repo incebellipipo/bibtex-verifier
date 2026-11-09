@@ -1,6 +1,7 @@
 // Converters from each API's JSON to the standard record shape:
 // title, author/editor, year, journal, volume, number, pages, doi, publisher,
 // url, _source.
+import { doiUrl, normalizeDoi } from "./doi.js";
 
 // "First Middle Last" -> "Last, First Middle"
 function lastFirst(name) {
@@ -51,7 +52,7 @@ export function ssToStandard(paper) {
     volume: "", number: "", pages: "",
     doi: ext.DOI || "",
     publisher: "",
-    url: ext.DOI ? `https://doi.org/${ext.DOI}` : "",
+    url: doiUrl(ext.DOI),
     _source: "semantic_scholar",
   };
 }
@@ -67,7 +68,7 @@ export function openAlexToStandard(work) {
   const last = biblio.last_page || "";
   const pages = first && last ? `${first}-${last}` : (first || last || "");
   // OpenAlex reports DOIs as full URLs (https://doi.org/10.x); store the bare DOI.
-  const doi = (work.doi || "").replace(/^https?:\/\/(dx\.)?doi\.org\//i, "");
+  const doi = normalizeDoi(work.doi);
 
   return {
     title: work.title || work.display_name || "",
@@ -79,7 +80,7 @@ export function openAlexToStandard(work) {
     pages,
     doi,
     publisher: source.host_organization_name || "",
-    url: doi ? `https://doi.org/${doi}` : (work.id || ""),
+    url: doiUrl(doi) || work.id || "",
     _source: "openalex",
   };
 }
@@ -121,7 +122,7 @@ export function dataCiteToStandard(record) {
     pages,
     doi,
     publisher,
-    url: attrs.url || (doi ? `https://doi.org/${doi}` : ""),
+    url: attrs.url || doiUrl(doi),
     _doiState: attrs.state || "",
     _doiActive: attrs.isActive,
     _source: "datacite",
@@ -143,7 +144,7 @@ export function doiBibtexToStandard(entry) {
     pages,
     doi: entry.doi || "",
     publisher: entry.publisher || "",
-    url: entry.url || (entry.doi ? `https://doi.org/${entry.doi}` : ""),
+    url: entry.url || doiUrl(entry.doi),
     _source: "doi_org",
   };
 }

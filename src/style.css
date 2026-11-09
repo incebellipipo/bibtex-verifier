@@ -906,6 +906,23 @@ body.verification-active .hero {
 .tag-needs_review { background: var(--yellow-bg); color: var(--yellow); }
 .tag-not_found { background: var(--red-bg); color: var(--red); }
 .tag-duplicate { background: var(--purple-bg); color: var(--purple); }
+.tag-checking {
+  background: var(--gray-bg);
+  color: var(--text-dim);
+  border: 1px solid var(--gray-border);
+  animation: checking-pulse 1.4s ease-in-out infinite;
+}
+@keyframes checking-pulse {
+  50% { opacity: 0.45; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tag-checking { animation: none; }
+}
+/* Controls are inert while a result is provisional; show that they're paused. */
+.entry-card.checking [inert] {
+  opacity: 0.6;
+  cursor: progress;
+}
 
 .entry-tags {
   display: flex;
@@ -1136,6 +1153,15 @@ body.verification-active .hero {
   box-shadow: 0 0 0 2px var(--accent-bg);
 }
 
+/* "None" placeholder for a field the entry does not have yet. */
+.choice-pill.pill-none,
+.choice-pill .none-label {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+.choice-pill .none-label {
+  font-size: inherit;
+}
+
 /* ── Mini × button ── */
 .field-actions-mini {
   white-space: nowrap;
@@ -1227,7 +1253,8 @@ body.verification-active .hero {
 /* ─── Entry actions (segmented toggle) ─────────────────────────── */
 .entry-actions {
   display: flex;
-  gap: 0;
+  flex-wrap: wrap;
+  gap: 0.4rem 0;
   margin-top: 0.6rem;
 }
 .entry-actions .seg-btn {
@@ -1242,11 +1269,13 @@ body.verification-active .hero {
   align-items: center;
   gap: 0.35rem;
 }
-.entry-actions .seg-btn:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
-.entry-actions .seg-btn:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; border-left: none; }
-.entry-actions .seg-btn:only-child { border-radius: var(--radius-sm); border-left: 1px solid var(--border); }
+/* *-of-type so the trailing DOI link (an <a>) doesn't affect the corners. */
+.entry-actions .seg-btn:first-of-type { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.entry-actions .seg-btn:last-of-type { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; border-left: none; }
+.entry-actions .seg-btn:only-of-type { border-radius: var(--radius-sm); border-left: 1px solid var(--border); }
 .entry-actions .seg-btn + .seg-btn { border-left: none; }
 
+.entry-actions .seg-btn.btn-delete-entry { color: var(--red); }
 .entry-actions .seg-btn:hover { color: var(--text); border-color: var(--text-dim); }
 .entry-actions .seg-btn.active-accept {
   background: var(--green-bg); border-color: var(--green-border); color: var(--green); font-weight: 500;
@@ -1254,6 +1283,37 @@ body.verification-active .hero {
 .entry-actions .seg-btn.active-revert {
   background: var(--yellow-bg); border-color: var(--yellow-border); color: var(--yellow); font-weight: 500;
 }
+
+/* DOI the entry will be exported with: gray unchanged, green adopted from the
+   database, amber when it differs from a match that needs review. */
+.entry-actions .doi-action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--gray-border);
+  border-radius: var(--radius-sm);
+  background: var(--gray-bg);
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.15s, color 0.15s;
+}
+.entry-actions .doi-action-link.doi-updated {
+  background: var(--green-bg); border-color: var(--green-border); color: var(--green);
+}
+.entry-actions .doi-action-link.doi-review {
+  background: var(--yellow-bg); border-color: var(--yellow-border); color: var(--yellow);
+}
+.entry-actions .doi-action-link:hover { border-color: currentColor; }
+.entry-actions .doi-action-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+.entry-actions .doi-action-link.doi-unchanged:hover,
+.entry-actions .doi-action-link.doi-unchanged:focus-visible { color: var(--text); }
 
 .add-field-form {
   display: grid;
@@ -2573,8 +2633,9 @@ body.verification-active .hero {
     padding-top: max(0.35rem, env(safe-area-inset-top));
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    max-height: 100dvh;
+    /* 100vh for browsers without dynamic viewport units; 100dvh wins elsewhere. */
     max-height: 100vh;
+    max-height: 100dvh;
   }
 
   .onboarding-panel-layer.onboarding-panel-top .onboarding-panel.glass {
@@ -2599,12 +2660,3 @@ body.verification-active .hero {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
-.choice-pill.pill-none,
-.choice-pill .none-label {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-}
-.choice-pill .none-label {
-  font-size: inherit;
-}
-.seg-btn.btn-delete-entry { color: var(--red, #dc3545); }

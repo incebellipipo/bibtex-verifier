@@ -74,7 +74,6 @@ describe("buildResult", () => {
       { ...entry, doi: "https://doi.org/10.1234/Example" }, 0,
       { title: "Test Paper", year: "2020", doi: "10.1234/example", _source: "datacite+crossref" },
     );
-    assert.equal(r.verified_by_datacite, true);
     assert.deepEqual(r.verification_sources, ["DataCite", "CrossRef"]);
   });
 
@@ -83,7 +82,6 @@ describe("buildResult", () => {
       { ...entry, doi: "10.1234/example" }, 0,
       { title: "Test Paper", year: "2020", doi: "10.1234/example", _source: "doi_org+crossref" },
     );
-    assert.equal(r.verified_by_doi_org, true);
     assert.deepEqual(r.verification_sources, ["DOI.org", "CrossRef"]);
   });
 
@@ -92,7 +90,7 @@ describe("buildResult", () => {
       { ...entry, doi: "10.1234/changed" }, 0,
       { title: "Test Paper", year: "2020", doi: "10.1234/original", _source: "datacite" },
     );
-    assert.equal(r.verified_by_datacite, false);
+    assert.deepEqual(r.verification_sources, []);
   });
 
   it("does not mark a fallback-only match as DataCite verified", () => {
@@ -100,7 +98,6 @@ describe("buildResult", () => {
       { ...entry, doi: "10.1234/example" }, 0,
       { title: "Test Paper", year: "2020", doi: "10.1234/example", _source: "crossref" },
     );
-    assert.equal(r.verified_by_datacite, false);
     assert.deepEqual(r.verification_sources, ["CrossRef"]);
   });
 
@@ -119,7 +116,6 @@ describe("buildResult", () => {
     };
     const r = buildResult(online, 0, null);
     assert.equal(r.status, "needs_review");
-    assert.equal(r.online_source, true);
     assert.equal(r.online_manual_review, true);
     assert.equal(r.online_url, "https://example.com/post");
     assert.equal(isOnlineOnlyEntry(online), true);

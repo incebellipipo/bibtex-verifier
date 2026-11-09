@@ -2,10 +2,14 @@
 // inline, remove a field or entry, and the "Accept all" / "Keep original" bulk actions.
 import { updatePreview } from "./preview.js";
 import {
-  appendAddedFieldRow, applyAllCardVisibility, editableEntryBib, renderEntryCard, updateSummary,
+  appendAddedFieldRow, applyAllCardVisibility, editableEntryBib, renderEntryCard,
+  syncDoiActionLink, updateSummary,
 } from "./cards.js";
 import { updateAuthorPills } from "./authors.js";
-import { buildResult, findDuplicateTitles, namesToBibtex, parseBib } from "../lib/index.js";
+import {
+  addedFieldEdit, buildResult, chooseEdit, doiUrl, fieldToBibtex, findDuplicateTitles, NAME_FIELDS,
+  namesToBibtex, parseBib, removeEdit, restoreEdit,
+} from "../lib/index.js";
 import { state } from "./state.js";
 
 function editsFor(idx) {
@@ -13,25 +17,18 @@ function editsFor(idx) {
   return state.fieldEdits[idx];
 }
 
-function displayFieldValue(field, value) {
-  return ["author", "editor"].includes(field) ? namesToBibtex(value || "") : (value || "");
-}
-
 function syncDoiLink(pill) {
   if (pill.dataset.field !== "doi") return;
   const link = pill.closest(".doi-value-wrap")?.querySelector(".doi-external-link");
   if (!link) return;
 
-  const doi = pill.textContent.trim()
-    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
-    .replace(/^doi:\s*/i, "");
-  if (!doi) {
+  const url = doiUrl(pill.textContent);
+  if (!url) {
     link.hidden = true;
     link.removeAttribute("href");
     return;
   }
 
-  const url = `https://doi.org/${encodeURI(doi).replace(/#/g, "%23").replace(/\?/g, "%3F")}`;
   const hoverText = `Open DOI in a new tab: ${url}`;
   link.hidden = false;
   link.href = url;
@@ -39,13 +36,10 @@ function syncDoiLink(pill) {
   link.setAttribute("aria-label", hoverText);
 }
 
-function setFieldEdit(idx, field, edit) {
+/** Record the user's choice for a field; see field-edits.js for the record shape. */
+function setFieldEdit(idx, field, action, value) {
   const edits = editsFor(idx);
-  edits[field] = {
-    ...edit,
-    ...(edits[field]?._injected ? { _injected: true } : {}),
-    ...(edits[field]?._added ? { _added: true } : {}),
-  };
+  edits[field] = chooseEdit(edits[field], action, value);
   return edits[field];
 }
 
@@ -72,6 +66,7 @@ function syncBulkBtns(card) {
 function afterRowChange(row, action) {
   syncRowState(row, action);
   syncBulkBtns(row.closest(".entry-card"));
+  if (row.dataset.field === "doi") syncDoiActionLink(row.closest(".entry-card"));
   updatePreview();
 }
 
@@ -90,7 +85,7 @@ function setSuggestedPill(pill, { active, editable, text }) {
 function selectOriginal(origPill) {
   const idx = parseInt(origPill.dataset.entry);
   const row = origPill.closest(".diff-row");
-  setFieldEdit(idx, origPill.dataset.field, { action: "original", value: origPill.dataset.val });
+  setFieldEdit(idx, origPill.dataset.field, "original", origPill.dataset.val);
 
   row.querySelectorAll(".pill-original").forEach(p => p.classList.add("active"));
   row.querySelectorAll(".choice-pill").forEach(p => p.classList.remove("removed"));
@@ -107,10 +102,9 @@ function selectOriginal(origPill) {
 function selectSuggested(sugPill) {
   const idx = parseInt(sugPill.dataset.entry);
   const row = sugPill.closest(".diff-row");
-  const edit = setFieldEdit(idx, sugPill.dataset.field, {
-    action: sugPill.dataset.customValue !== undefined ? "custom" : "found",
-    value: sugPill.dataset.customValue ?? sugPill.dataset.val,
-  });
+  const edit = setFieldEdit(idx, sugPill.dataset.field,
+    sugPill.dataset.customValue !== undefined ? "custom" : "found",
+    sugPill.dataset.customValue ?? sugPill.dataset.val);
 
   row.querySelectorAll(".pill-original").forEach(p => p.classList.remove("active"));
   row.querySelectorAll(".choice-pill").forEach(p => p.classList.remove("removed"));
@@ -124,16 +118,7 @@ function removeField(xBtn) {
   const field = xBtn.dataset.field;
   const row = xBtn.closest(".diff-row");
   const edits = editsFor(idx);
-  const previous = edits[field] || { action: "original", value: "" };
-
-  edits[field] = {
-    action: "remove",
-    value: "",
-    _savedAction: previous.action,
-    _savedValue: previous.value ?? "",
-    ...(previous._injected ? { _injected: true } : {}),
-    ...(previous._added ? { _added: true } : {}),
-  };
+  edits[field] = removeEdit(edits[field]);
   row.querySelectorAll(".choice-pill").forEach(pill => {
     pill.classList.remove("active");
     pill.classList.add("removed");
@@ -147,29 +132,23 @@ function restoreRemovedField(xBtn) {
   const idx = Number(xBtn.dataset.entry);
   const field = xBtn.dataset.field;
   const row = xBtn.closest(".diff-row");
-  const removed = editsFor(idx)[field] || {};
-  const action = removed._savedAction || "original";
-  const value = removed._savedValue ?? "";
+  const edits = editsFor(idx);
+  edits[field] = restoreEdit(edits[field]);
+  const { action, value } = edits[field];
   const origPill = row.querySelector(".pill-original");
   const sugPill = row.querySelector(".pill-suggested");
   const valPill = row.querySelector(".pill-value");
 
-  editsFor(idx)[field] = {
-    action,
-    value,
-    ...(removed._injected ? { _injected: true } : {}),
-    ...(removed._added ? { _added: true } : {}),
-  };
   row.querySelectorAll(".choice-pill").forEach(pill => pill.classList.remove("removed"));
   xBtn.classList.remove("active");
 
   if (valPill) {
-    valPill.textContent = displayFieldValue(field, value);
+    valPill.textContent = fieldToBibtex(field, value);
     valPill.classList.add("active");
     valPill.contentEditable = "true";
   } else if (action === "found" || action === "custom") {
     origPill?.classList.remove("active");
-    const displayValue = displayFieldValue(field, value);
+    const displayValue = fieldToBibtex(field, value);
     setSuggestedPill(sugPill, { active: true, editable: true, text: displayValue });
     if (action === "custom") sugPill.dataset.customValue = displayValue;
   } else {
@@ -310,13 +289,13 @@ function submitAddedField(form) {
     return;
   }
 
-  setFieldEdit(idx, field, { action: "custom", value, _added: true });
+  editsFor(idx)[field] = addedFieldEdit(value);
   const existingRow = [...card.querySelectorAll(".field-row-plain")]
     .find(row => row.dataset.field === field);
   if (existingRow) {
     const pill = existingRow.querySelector(".pill-value");
     existingRow.dataset.action = "custom";
-    pill.textContent = displayFieldValue(field, value);
+    pill.textContent = fieldToBibtex(field, value);
     pill.classList.remove("removed");
     pill.classList.add("active");
     pill.contentEditable = "true";
@@ -325,6 +304,7 @@ function submitAddedField(form) {
   } else {
     appendAddedFieldRow(card, idx, field);
   }
+  if (field === "doi") syncDoiActionLink(card);
   closeAddFieldForm(form);
   updatePreview();
 }
@@ -343,12 +323,12 @@ function applyBulk(btn) {
 
     if (isAccept) {
       if (sugPill) {
-        setFieldEdit(idx, field, { action: "found", value: sugPill.dataset.val });
+        setFieldEdit(idx, field, "found", sugPill.dataset.val);
         origPill?.classList.remove("active");
         setSuggestedPill(sugPill, { active: true, editable: true, text: foundVal });
       }
     } else if (origPill) {
-      setFieldEdit(idx, field, { action: "original", value: origPill.dataset.val });
+      setFieldEdit(idx, field, "original", origPill.dataset.val);
       origPill.classList.add("active");
       setSuggestedPill(sugPill, { active: false, editable: false });
     }
@@ -358,13 +338,14 @@ function applyBulk(btn) {
     syncRowState(row, isAccept ? "found" : "original");
   });
   syncBulkBtns(card);
+  syncDoiActionLink(card);
   updatePreview();
 }
 
 function onInlineEdit(pill) {
   const idx = parseInt(pill.dataset.entry);
   pill.dataset.customValue = pill.textContent.trim();
-  setFieldEdit(idx, pill.dataset.field, { action: "custom", value: pill.textContent.trim() });
+  setFieldEdit(idx, pill.dataset.field, "custom", pill.textContent.trim());
 
   const row = pill.closest(".diff-row");
   syncDoiLink(pill);
@@ -376,7 +357,7 @@ function onInlineEdit(pill) {
 export function initFieldActions() {
   document.addEventListener("focusout", e => {
     const pill = e.target.closest('.pill-suggested[contenteditable="true"], .pill-value[contenteditable="true"]');
-    if (!pill || !["author", "editor"].includes(pill.dataset.field)) return;
+    if (!pill || !NAME_FIELDS.includes(pill.dataset.field)) return;
     const encoded = namesToBibtex(pill.textContent);
     if (encoded !== pill.textContent) {
       pill.textContent = encoded;

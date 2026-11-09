@@ -136,6 +136,63 @@ describe("lookupPaper", () => {
     assert.equal(request.searchParams.get("lang"), "en-US");
   });
 
+  it("reports a DOI match before slower title sources answer", async () => {
+    const pendingResponses = new Map();
+    globalThis.fetch = (url) => {
+      const u = new URL(url);
+      return new Promise(resolve => pendingResponses.set(
+        u.host.includes("citation.doi.org") ? "doi"
+          : u.host.includes("semanticscholar") ? "ss" : "cr",
+        resolve,
+      ));
+    };
+    const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+    const progress = [];
+    let settled = false;
+    const lookup = lookupPaper(
+      "Attention Is All You Need", "10.5555/1",
+      { title: "Attention Is All You Need", author: "Vaswani, Ashish", year: "2017" },
+      (found) => { assert.ok(!settled, "progress after resolve"); progress.push(found._source); },
+    ).finally(() => { settled = true; });
+    await tick();
+
+    pendingResponses.get("doi")(plain(200, citationBibtex));
+    await tick();
+    assert.deepEqual(progress, ["doi_org"]);
+
+    pendingResponses.get("cr")(json(200, { message: { items: [crItem] } }));
+    await tick();
+    assert.deepEqual(progress, ["doi_org", "doi_org+crossref"]);
+
+    pendingResponses.get("ss")(json(200, { data: [ssPaper] }));
+    const found = await lookup;
+    assert.equal(found._source, "doi_org+semantic_scholar+crossref");
+    assert.deepEqual(progress, ["doi_org", "doi_org+crossref", "doi_org+semantic_scholar+crossref"]);
+  });
+
+  it("does not report an empty or repeated provisional result", async () => {
+    const progress = [];
+    mockFetch({ cr: () => json(200, { message: { items: [crItem] } }) });
+    const found = await lookupPaper("Attention Is All You Need", "", {}, (f) => progress.push(f._source));
+    assert.equal(found._source, "crossref");
+    assert.deepEqual(progress, ["crossref"]);
+
+    progress.length = 0;
+    mockFetch();
+    assert.equal(await lookupPaper("Totally Made Up", "", {}, (f) => progress.push(f)), null);
+    assert.deepEqual(progress, []);
+  });
+
+  it("does not fail the lookup when the progress callback throws", async () => {
+    mockFetch({ cr: () => json(200, { message: { items: [crItem] } }) });
+    const realError = console.error;
+    console.error = () => {};
+    try {
+      const found = await lookupPaper("Attention Is All You Need", "", {}, () => { throw new Error("render bug"); });
+      assert.equal(found._source, "crossref");
+    } finally { console.error = realError; }
+  });
+
   it("ignores DataCite metadata when the DOI belongs to a different work", async () => {
     const wrongRecord = structuredClone(dcRecord);
     wrongRecord.data.attributes.titles[0].title = "A Completely Different Publication";
@@ -211,6 +268,27 @@ describe("lookupPaper", () => {
     }
   });
 
+  it("sends DOI providers only the DOI, and title providers only the title", async () => {
+    mockFetch();
+    const title = "Some Title";
+    const doi = "10.5555/Private-Check";
+    await lookupPaper(title, doi, {
+      title, doi, author: "Secret, Author", year: "2020", journal: "Hidden Journal", note: "private",
+    });
+
+    const doiCalls = calls.filter(u => u.host.includes("doi.org") || u.host.includes("datacite"));
+    const titleCalls = calls.filter(u => !doiCalls.includes(u));
+    assert.ok(doiCalls.length && titleCalls.length);
+    for (const u of calls) {
+      const sent = decodeURIComponent(u.pathname + u.search);
+      for (const leaked of ["Secret", "2020", "Hidden Journal", "private"])
+        assert.ok(!sent.includes(leaked), `${leaked} sent in ${u}`);
+      assert.ok(!u.searchParams.has("mailto"));
+    }
+    for (const u of doiCalls) assert.ok(!decodeURIComponent(u.toString()).includes(title), u.toString());
+    for (const u of titleCalls) assert.ok(!decodeURIComponent(u.toString()).includes(doi), u.toString());
+  });
+
   it("falls back to OpenAlex when SS and CrossRef have nothing", async () => {
     mockFetch({
       oa: () => json(200, { results: [{ title: "Some OpenAlex Paper", publication_year: 2019, id: "W1" }] }),
@@ -238,6 +316,26 @@ describe("lookupPaper", () => {
   it("reports an inconclusive lookup instead of a miss when a source stays down", async () => {
     mockFetch({ cr: () => json(429, {}) });
     await assert.rejects(lookupPaper("Attention Is All You Need"), TransientLookupError);
+  });
+
+  it("keeps the per-source spacing across retries", async () => {
+    apiSettings.throttle = true;
+    const ssTimes = [];
+    mockFetch({
+      ss: (u) => {
+        ssTimes.push(Date.now());
+        if (ssTimes.length === 1) return json(429, {});
+        return u.pathname.endsWith("/match") ? json(200, { data: [ssPaper] }) : json(200, { data: [] });
+      },
+    });
+    await lookupPaper("Attention Is All You Need");
+    await lookupPaper("Attention Is All You Need");
+
+    // The 429 slows SS to 650ms between requests. Both the retry and the next
+    // entry's request must respect that, not fire right after the retry.
+    assert.equal(ssTimes.length, 3);
+    assert.ok(ssTimes[1] - ssTimes[0] >= 600, `retry after ${ssTimes[1] - ssTimes[0]}ms`);
+    assert.ok(ssTimes[2] - ssTimes[1] >= 600, `next request after ${ssTimes[2] - ssTimes[1]}ms`);
   });
 
   it("treats network errors as transient", async () => {

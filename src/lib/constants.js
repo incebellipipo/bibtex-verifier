@@ -3,6 +3,9 @@ export const TITLE_MATCH_THRESHOLD = 85;
 // Minimum title similarity for a search candidate to be considered at all.
 export const MIN_TITLE_SIM = 70;
 
+// Fields holding "Last, First and ..." name lists, written with BibTeX accents.
+export const NAME_FIELDS = ["author", "editor"];
+
 export const COMPARED_FIELDS = [
   "author", "editor", "year", "journal", "booktitle",
   "volume", "number", "pages", "doi", "publisher",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { namesToBibtex } from "../src/lib/latex.js";
+import { encodeEntryNames, fieldToBibtex, namesToBibtex } from "../src/lib/latex.js";
 import { buildExportEntries } from "../src/lib/export.js";
 import { entriesToBib, parseBib } from "../src/lib/bibtex.js";
 
@@ -34,5 +34,21 @@ describe("BibTeX name encoding", () => {
       0: { year: { action: 'custom', value: '' } },
     }, {});
     assert.ok(!('year' in out[0]));
+  });
+});
+
+describe("fieldToBibtex / encodeEntryNames", () => {
+  it("encodes name fields only", () => {
+    assert.equal(fieldToBibtex("author", "Müller, Jörg"), String.raw`M{\"u}ller, J{\"o}rg`);
+    assert.equal(fieldToBibtex("editor", "Søren"), String.raw`S{\o}ren`);
+    assert.equal(fieldToBibtex("title", "Über alles"), "Über alles");
+    assert.equal(fieldToBibtex("author", undefined), "");
+  });
+
+  it("returns an encoded copy without touching the original entry", () => {
+    const entry = { ID: "k", author: "Müller", editor: "Łukasz", title: "Über" };
+    const out = encodeEntryNames(entry);
+    assert.deepEqual(out, { ID: "k", author: String.raw`M{\"u}ller`, editor: String.raw`{\L}ukasz`, title: "Über" });
+    assert.equal(entry.author, "Müller");
   });
 });

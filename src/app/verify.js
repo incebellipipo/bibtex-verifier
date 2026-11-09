@@ -1,6 +1,6 @@
 // Verification run: parse the .bib, look up each entry, render results as they arrive.
 import {
-  buildResult, findDuplicateTitles, isOnlineOnlyEntry, parseBib, stripLatex,
+  buildResult, findDuplicateTitles, isOnlineOnlyEntry, parseBib, stripLatex, userFieldChoices,
 } from "../lib/index.js";
 import { lookupPaper, resetRateLimits, sleep, TransientLookupError } from "./api.js";
 import { updateAuthorPills } from "./authors.js";
@@ -54,15 +54,28 @@ function showResult(r) {
   updatePreview();
 }
 
-/** Look up one entry. `inconclusive` means a source failed transiently. */
-async function lookupEntry(entry) {
+/**
+ * Show a lookup result for entry `i`, replacing any earlier one. The earlier
+ * render's default field choices are dropped so this result's own defaults
+ * apply; the user's choices are kept.
+ */
+function showLookupResult(entry, i, found, duplicateOf, extra = {}) {
+  state.fieldEdits[i] = userFieldChoices(state.fieldEdits[i]);
+  showResult({ ...buildResult(entry, i, found, duplicateOf), ...extra });
+}
+
+/**
+ * Look up one entry. `inconclusive` means a source failed transiently.
+ * `onProgress` receives provisional matches while other sources are pending.
+ */
+async function lookupEntry(entry, onProgress = null) {
   const title = stripLatex(entry.title || "");
   if (TOUR_FAKE_MARKER.test(title)) {
     await sleep(500);
     return { found: null, inconclusive: false };
   }
   try {
-    return { found: await lookupPaper(title, entry.doi || "", entry), inconclusive: false };
+    return { found: await lookupPaper(title, entry.doi || "", entry, onProgress), inconclusive: false };
   } catch (err) {
     if (err instanceof TransientLookupError) return { found: null, inconclusive: true };
     console.warn("Lookup failed:", err);
@@ -121,9 +134,13 @@ async function runVerification(resumeTour) {
       continue;
     }
 
-    const { found, inconclusive } = await lookupEntry(entry);
+    // Show each provisional match as soon as a source confirms it; the card
+    // stays locked while checking (see renderEntryCard).
+    const { found, inconclusive } = await lookupEntry(entry, (partial) => {
+      showLookupResult(entry, i, partial, duplicateOf[i], { checking: true });
+    });
     if (inconclusive) pendingRetry.push(i);
-    showResult(buildResult(entry, i, found, duplicateOf[i]));
+    showLookupResult(entry, i, found, duplicateOf[i]);
   }
 
   if (pendingRetry.length) {
@@ -136,7 +153,7 @@ async function runVerification(resumeTour) {
         const { found, inconclusive } = await lookupEntry(entries[i]);
         // Keep deferring only while still inconclusive and a round remains.
         if (inconclusive && round === 0) { stillPending.push(i); continue; }
-        showResult(buildResult(entries[i], i, found, duplicateOf[i]));
+        showLookupResult(entries[i], i, found, duplicateOf[i]);
       }
       pendingRetry.splice(0, pendingRetry.length, ...stillPending);
       if (pendingRetry.length) await sleep(1500);

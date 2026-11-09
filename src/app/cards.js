@@ -1,7 +1,8 @@
 // Entry cards: rendering, status/summary badges, and filter/search visibility.
 import {
-  applyFieldEdits, COMPARED_FIELDS, entriesToBib, entryMatchesQuery,
-  groupDuplicateResultIndices, namesToBibtex, stripLatex, truncateAuthors,
+  applyFieldEdits, COMPARED_FIELDS, defaultDiffEdit, defaultPlainEdit, doiLinkState, doiUrl,
+  encodeEntryNames, entriesToBib,
+  entryMatchesQuery, fieldToBibtex, groupDuplicateResultIndices, stripLatex, truncateAuthors,
 } from "../lib/index.js";
 import { $, $$, esc } from "./dom.js";
 import { getSettings } from "./settings.js";
@@ -25,6 +26,12 @@ const REMOVE_ICON = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none"
 const VERIFIED_ICON = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
 // External-link icon using the familiar Lucide/Feather box-and-arrow shape.
 const EXTERNAL_LINK_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`;
+const CHECK_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+const REVERT_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>`;
+const CHEVRON_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>`;
+const CODE_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+    </svg>`;
 
 function statusTagContent(status, result) {
   const sources = result.verification_sources || [];
@@ -47,17 +54,38 @@ export function removeFieldButton(idx, field, currentAction, title = "Remove fie
     </button>`;
 }
 
-const fieldText = (field, value) => ["author", "editor"].includes(field) ? namesToBibtex(value || "") : (value || "");
-
 function doiLink(value) {
-  const doi = String(value || "").trim()
-    .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
-    .replace(/^doi:\s*/i, "");
-  if (!doi) return "";
-  const url = `https://doi.org/${encodeURI(doi).replace(/#/g, "%23").replace(/\?/g, "%3F")}`;
+  const url = doiUrl(value);
+  if (!url) return "";
   const hoverText = `Open DOI in a new tab: ${url}`;
   return `<a class="doi-external-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer"
             title="${esc(hoverText)}" aria-label="${esc(hoverText)}">${EXTERNAL_LINK_ICON}</a>`;
+}
+
+const DOI_TONE_LABELS = {
+  unchanged: "unchanged",
+  updated: "auto-updated from the database",
+  review: "needs review",
+};
+
+/** Link to the DOI the entry will be exported with, colored by its state. */
+function doiActionLink(idx) {
+  const doiState = doiLinkState(state.parsedEntries[idx] || {}, state.results[idx], state.fieldEdits[idx]);
+  if (!doiState) return "";
+  const url = doiUrl(doiState.doi);
+  const label = state.results[idx]?.status === "not_found"
+    ? "not confirmed by DOI.org or DataCite" : DOI_TONE_LABELS[doiState.tone];
+  return `<a class="doi-action-link doi-${doiState.tone}" href="${esc(url)}" target="_blank"
+      rel="noopener noreferrer" title="${esc(`DOI ${label}: ${url}`)}"
+      aria-label="${esc(`Open DOI (${label}) in a new tab`)}">DOI ${EXTERNAL_LINK_ICON}</a>`;
+}
+
+/** Refresh the action-row DOI link after the entry's DOI choice changes. */
+export function syncDoiActionLink(card) {
+  const actions = card?.querySelector(".entry-actions");
+  if (!actions) return;
+  actions.querySelector(".doi-action-link")?.remove();
+  actions.insertAdjacentHTML("beforeend", doiActionLink(Number(card.dataset.index)));
 }
 
 function doiValueWrap(valueHTML, value) {
@@ -66,9 +94,7 @@ function doiValueWrap(valueHTML, value) {
 
 export function editableEntryBib(idx) {
   const entry = applyFieldEdits(state.parsedEntries[idx], state.fieldEdits[idx]);
-  for (const field of ["author", "editor"])
-    if (entry[field]) entry[field] = namesToBibtex(entry[field]);
-  return entriesToBib([entry]).trim();
+  return entriesToBib([encodeEntryNames(entry)]).trim();
 }
 
 // ─── Visibility (filter + search) ────────────────────────────────────
@@ -172,18 +198,21 @@ export function updateCardStatuses() {
 }
 
 // ─── Rendering ───────────────────────────────────────────────────────
-function renderDiffRow(r, idx, d, hasSuggestion, maxAuthors) {
-  d = { ...d, original: fieldText(d.field, d.original), found: fieldText(d.field, d.found) };
+/**
+ * A suggestion row comparing the entry's value with `d.found`. `injected`
+ * marks the author-truncation row, which is not a lookup suggestion.
+ */
+export function renderDiffRow(r, idx, d, hasSuggestion, maxAuthors, { injected = false } = {}) {
+  d = { ...d, original: fieldToBibtex(d.field, d.original), found: fieldToBibtex(d.field, d.found) };
+  if (!state.fieldEdits[idx]) state.fieldEdits[idx] = {};
   const edits = state.fieldEdits[idx];
   const isEnrichment = !(d.original || "").trim();
-  // Enrichments and "updated" entries adopt the suggestion by default.
-  const defaultAction = (isEnrichment || r.status === "updated") ? "found" : "original";
 
-  if (!edits[d.field]) edits[d.field] = { action: defaultAction, value: d.found || "" };
+  if (!edits[d.field]) edits[d.field] = defaultDiffEdit(d, r.status);
   const fe = edits[d.field];
   const currentAction = fe.action;
 
-  const suggestionText = fieldText(d.field,
+  const suggestionText = fieldToBibtex(d.field,
     currentAction === "custom" ? fe.value : currentAction === "remove" ? fe._savedValue : d.found);
   const displaySuggestion = (d.field === "author" && maxAuthors > 0 && currentAction !== "custom")
     ? truncateAuthors(suggestionText, maxAuthors) : suggestionText;
@@ -198,7 +227,7 @@ function renderDiffRow(r, idx, d, hasSuggestion, maxAuthors) {
                 title="Use suggested value (click to select, edit to customize)">${esc(displaySuggestion)}</span>`;
 
   return `<tr class="diff-row${authorMatchHidden ? " author-match-hidden" : ""}" data-entry="${idx}" data-field="${esc(d.field)}" data-action="${currentAction}"
-      data-enrichment="${isEnrichment ? "1" : ""}"
+      data-enrichment="${isEnrichment ? "1" : ""}"${injected ? ' data-injected="1"' : ""}
       data-found-val="${encodeURIComponent(d.found || "")}"
       data-original-val="${encodeURIComponent(d.original || "")}">
       <td class="field-name"><span class="field-name-pill">${esc(d.field)}</span></td>
@@ -216,12 +245,14 @@ function renderDiffRow(r, idx, d, hasSuggestion, maxAuthors) {
     </tr>`;
 }
 
-function renderPlainFieldRow(idx, f, entry) {
+/** A row for a field the lookup made no suggestion for. */
+export function renderPlainFieldRow(idx, f, entry) {
+  if (!state.fieldEdits[idx]) state.fieldEdits[idx] = {};
   const edits = state.fieldEdits[idx];
-  if (!edits[f]) edits[f] = { action: "original", value: entry[f] || "" };
+  if (!edits[f]) edits[f] = defaultPlainEdit(entry[f]);
   const fe = edits[f];
   const removed = fe.action === "remove";
-  const value = fieldText(f, removed ? fe._savedValue : fe.value);
+  const value = fieldToBibtex(f, removed ? fe._savedValue : fe.value);
   const valueHTML = `<span class="choice-pill pill-value ${removed ? "removed" : "active"}"
               contenteditable="${removed ? "false" : "true"}" spellcheck="false"
               data-entry="${idx}" data-field="${esc(f)}">${esc(value)}</span>`;
@@ -330,89 +361,12 @@ function renderSearchLinks(title) {
   </div>`;
 }
 
-export function renderEntryCard(r) {
-  const idx = r.index;
-  if (state.deletedEntries.has(idx)) return;
-  const entry = state.parsedEntries[idx];
-  if (!state.fieldEdits[idx]) state.fieldEdits[idx] = {};
-
-  const card = document.createElement("div");
-  const manuallyChecked = state.checkedEntries.has(idx);
-  card.className = `entry-card status-${r.status}${manuallyChecked ? " user-checked" : ""}`;
-  card.dataset.status = r.status;
-  card.dataset.index = idx;
-  if (r.duplicate_of) card.dataset.duplicate = "true";
-
-  const hasDiffs = r.field_diffs?.length > 0;
-  // Verified entries can still carry enrichment-only diffs worth adopting.
-  const hasSuggestion = r.status === "updated" || r.status === "needs_review" || (r.status === "verified" && hasDiffs);
-
-  let diffHTML = "";
-  if (hasDiffs) {
-    const maxAuthors = getSettings().maxAuthors;
-    const rows = r.field_diffs.map(d => renderDiffRow(r, idx, d, hasSuggestion, maxAuthors)).join("");
-    diffHTML = `<table class="diff-table">
-      ${DIFF_TABLE_HEADER}
-      ${rows}
-    </table>`;
-  }
-
-  const diffFields = new Set((r.field_diffs || []).map(d => d.field));
-  const addedFields = Object.entries(state.fieldEdits[idx])
-    .filter(([field, edit]) => edit?._added && !diffFields.has(field))
-    .map(([field]) => field);
-  const extraFields = [...new Set([
-    ...["title", ...COMPARED_FIELDS].filter(f => !diffFields.has(f) && (entry[f] || "").trim()),
-    ...addedFields,
-  ])];
-  if (extraFields.length) {
-    const extraRows = extraFields.map(f => renderPlainFieldRow(idx, f, entry)).join("");
-    diffHTML += fieldsSectionHTML(extraRows, extraFields.length, hasDiffs);
-  }
-
-  let actionsHTML = "";
-  if (hasSuggestion && hasDiffs) {
-    const edits = state.fieldEdits[idx];
-    const allFound = r.field_diffs.every(d => edits[d.field]?.action === "found");
-    const allOriginal = r.field_diffs.every(d => edits[d.field]?.action === "original");
-    actionsHTML = `<div class="entry-actions">
-      <button class="seg-btn btn-accept-all ${allFound ? "active-accept" : ""}" data-entry="${idx}">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-        Accept all
-      </button>
-      <button class="seg-btn btn-revert-all ${allOriginal ? "active-revert" : ""}" data-entry="${idx}">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
-        Keep original
-      </button>
-      <button type="button" class="seg-btn btn-add-field" data-entry="${idx}">+ Add field</button>
-      <button type="button" class="seg-btn btn-delete-entry" data-entry="${idx}">Delete</button>
-    </div>`;
-  } else {
-    actionsHTML = `<div class="entry-actions">
-      <button type="button" class="seg-btn btn-add-field" data-entry="${idx}">+ Add field</button>
-      <button type="button" class="seg-btn btn-delete-entry" data-entry="${idx}">Delete</button>
-    </div>`;
-  }
-
-  const addFieldForm = `<form class="add-field-form" data-entry="${idx}" hidden>
-    <label>
-      <span>Field name</span>
-      <input class="add-field-name" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="e.g. keywords">
-    </label>
-    <label class="add-field-value-label">
-      <span>Value</span>
-      <input class="add-field-value" type="text" autocomplete="off" spellcheck="false" placeholder="Field value">
-    </label>
-    <button type="submit" class="add-field-submit">Add</button>
-    <button type="button" class="add-field-cancel">Cancel</button>
-    <div class="add-field-error" role="alert" aria-live="polite"></div>
-  </form>`;
-
-  const jumpBtn = `<button class="btn-jump-preview" type="button" data-entry-id="${esc(r.entry_id)}" title="Scroll to this entry in the live preview">
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-  </button>`;
-  const checkedControl = `<label class="entry-review-control entry-checked-control"
+function headerHTML(r, idx, manuallyChecked) {
+  const tagTitle = (r.verification_sources || []).length
+    ? `Metadata source: ${r.verification_sources.join(", ")}`
+    : r.online_manual_review ? "Online source requiring manual review" : statusLabel(r.status);
+  // The Checked marker is not offered until the result is final.
+  const checkedControl = r.checking ? "" : `<label class="entry-review-control entry-checked-control"
       title="Manual review marker; does not change verification status">
     <span class="entry-checked-label">Checked</span>
     <span class="entry-checked-box">
@@ -420,15 +374,38 @@ export function renderEntryCard(r) {
         ${manuallyChecked ? "checked" : ""} aria-label="Mark this entry as manually checked">
     </span>
   </label>`;
-  const textEditId = `entry-text-editor-${idx}`;
-  const textEditBtn = `<button class="btn-text-edit-entry" type="button" data-entry="${idx}"
-      aria-expanded="false" aria-controls="${textEditId}" title="Edit this entry as BibTeX text">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
-    </svg>
-    <span>Text edit</span>
-  </button>`;
-  const textEditor = `<form class="entry-text-editor" id="${textEditId}" data-entry="${idx}" hidden>
+
+  return `<div class="entry-header">
+    <div class="entry-header-text">
+      <div class="entry-title">${esc(r.title || "(no title)")}</div>
+      <div class="entry-meta">${esc(r.entry_id)} &middot; ${esc(r.entry_type)}</div>
+    </div>
+    <div class="entry-header-aside">
+      <div class="entry-tags">
+        ${r.duplicate_of ? '<span class="status-tag tag-duplicate">Duplicate</span>' : ""}
+        <span class="${statusTagClass(r.status)}" title="${esc(tagTitle)}">
+          ${statusTagContent(r.status, r)}
+        </span>
+        ${r.checking ? `<span class="status-tag tag-checking" role="status"
+          title="Provisional: other sources are still being checked">Checking…</span>` : ""}
+      </div>
+      <div class="entry-review-controls" role="group" aria-label="Entry review controls">
+        ${checkedControl}
+        <button class="btn-jump-preview" type="button" data-entry-id="${esc(r.entry_id)}" title="Scroll to this entry in the live preview">
+          ${CHEVRON_ICON}${CHEVRON_ICON}
+        </button>
+        <button class="btn-text-edit-entry" type="button" data-entry="${idx}"
+            aria-expanded="false" aria-controls="entry-text-editor-${idx}" title="Edit this entry as BibTeX text">
+          ${CODE_ICON}
+          <span>Text edit</span>
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function textEditorHTML(r, idx) {
+  return `<form class="entry-text-editor" id="entry-text-editor-${idx}" data-entry="${idx}" hidden>
     <div class="entry-text-editor-heading">
       <div>
         <strong>Edit BibTeX entry</strong>
@@ -443,32 +420,111 @@ export function renderEntryCard(r) {
       <button type="submit" class="entry-text-editor-apply">Apply text</button>
     </div>
   </form>`;
+}
 
-  card.innerHTML = `<div class="entry-header">
-    <div class="entry-header-text">
-      <div class="entry-title">${esc(r.title || "(no title)")}</div>
-      <div class="entry-meta">${esc(r.entry_id)} &middot; ${esc(r.entry_type)}</div>
-    </div>
-    <div class="entry-header-aside">
-      <div class="entry-tags">
-        ${r.duplicate_of ? '<span class="status-tag tag-duplicate">Duplicate</span>' : ""}
-        <span class="${statusTagClass(r.status)}"
-          title="${esc((r.verification_sources || []).length
-            ? `Metadata source: ${r.verification_sources.join(", ")}`
-            : r.online_manual_review ? "Online source requiring manual review" : statusLabel(r.status))}">
-          ${statusTagContent(r.status, r)}
-        </span>
-      </div>
-      <div class="entry-review-controls" role="group" aria-label="Entry review controls">
-        ${checkedControl}
-        ${jumpBtn}
-        ${textEditBtn}
-      </div>
-    </div>
-  </div>${textEditor}${renderHints(r)}${diffHTML}${actionsHTML}${addFieldForm}${renderSearchLinks(r.title)}`;
+/** The suggestion table plus the collapsible table of the entry's other fields. */
+function fieldTablesHTML(r, idx, entry, hasSuggestion) {
+  const diffs = r.field_diffs || [];
+  let html = "";
+  if (diffs.length) {
+    const maxAuthors = getSettings().maxAuthors;
+    html = `<table class="diff-table">
+      ${DIFF_TABLE_HEADER}
+      ${diffs.map(d => renderDiffRow(r, idx, d, hasSuggestion, maxAuthors)).join("")}
+    </table>`;
+  }
+
+  const diffFields = new Set(diffs.map(d => d.field));
+  const addedFields = Object.entries(state.fieldEdits[idx])
+    .filter(([field, edit]) => edit?._added && !diffFields.has(field))
+    .map(([field]) => field);
+  const extraFields = [...new Set([
+    ...["title", ...COMPARED_FIELDS].filter(f => !diffFields.has(f) && (entry[f] || "").trim()),
+    ...addedFields,
+  ])];
+  if (extraFields.length) {
+    const rows = extraFields.map(f => renderPlainFieldRow(idx, f, entry)).join("");
+    html += fieldsSectionHTML(rows, extraFields.length, diffs.length > 0);
+  }
+  return html;
+}
+
+/** Reads the field choices that fieldTablesHTML records, so render it after. */
+function actionsHTML(r, idx, hasSuggestion) {
+  let bulk = "";
+  if (hasSuggestion && r.field_diffs?.length) {
+    const edits = state.fieldEdits[idx];
+    const allFound = r.field_diffs.every(d => edits[d.field]?.action === "found");
+    const allOriginal = r.field_diffs.every(d => edits[d.field]?.action === "original");
+    bulk = `<button class="seg-btn btn-accept-all ${allFound ? "active-accept" : ""}" data-entry="${idx}">
+        ${CHECK_ICON}
+        Accept all
+      </button>
+      <button class="seg-btn btn-revert-all ${allOriginal ? "active-revert" : ""}" data-entry="${idx}">
+        ${REVERT_ICON}
+        Keep original
+      </button>`;
+  }
+  return `<div class="entry-actions">
+      ${bulk}
+      <button type="button" class="seg-btn btn-add-field" data-entry="${idx}">+ Add field</button>
+      <button type="button" class="seg-btn btn-delete-entry" data-entry="${idx}">Delete</button>
+      ${doiActionLink(idx)}
+    </div>`;
+}
+
+function addFieldFormHTML(idx) {
+  return `<form class="add-field-form" data-entry="${idx}" hidden>
+    <label>
+      <span>Field name</span>
+      <input class="add-field-name" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="e.g. keywords">
+    </label>
+    <label class="add-field-value-label">
+      <span>Value</span>
+      <input class="add-field-value" type="text" autocomplete="off" spellcheck="false" placeholder="Field value">
+    </label>
+    <button type="submit" class="add-field-submit">Add</button>
+    <button type="button" class="add-field-cancel">Cancel</button>
+    <div class="add-field-error" role="alert" aria-live="polite"></div>
+  </form>`;
+}
+
+/**
+ * A provisional result is replaced as more sources answer, and its field
+ * choices are discarded then, so suggestions and edits stay locked until the
+ * final result. Delete and preview jump stay usable.
+ */
+function lockProvisionalCard(card) {
+  card.classList.add("checking");
+  card.setAttribute("aria-busy", "true");
+  card.querySelectorAll(
+    ".diff-table, .fields-toggle-wrap, .btn-accept-all, .btn-revert-all, .btn-add-field, .btn-text-edit-entry",
+  ).forEach(el => { el.inert = true; });
+}
+
+export function renderEntryCard(r) {
+  const idx = r.index;
+  if (state.deletedEntries.has(idx)) return;
+  const entry = state.parsedEntries[idx];
+  if (!state.fieldEdits[idx]) state.fieldEdits[idx] = {};
+
+  const card = document.createElement("div");
+  const manuallyChecked = state.checkedEntries.has(idx);
+  card.className = `entry-card status-${r.status}${manuallyChecked ? " user-checked" : ""}`;
+  card.dataset.status = r.status;
+  card.dataset.index = idx;
+  if (r.duplicate_of) card.dataset.duplicate = "true";
+
+  // Verified entries can still carry enrichment-only diffs worth adopting.
+  const hasSuggestion = r.status === "updated" || r.status === "needs_review"
+    || (r.status === "verified" && r.field_diffs?.length > 0);
+  const fields = fieldTablesHTML(r, idx, entry, hasSuggestion);
+  card.innerHTML = headerHTML(r, idx, manuallyChecked) + textEditorHTML(r, idx) + renderHints(r)
+    + fields + actionsHTML(r, idx, hasSuggestion) + addFieldFormHTML(idx) + renderSearchLinks(r.title);
+  if (r.checking) lockProvisionalCard(card);
 
   applyCardVisibility(card);
-  // The retry pass re-renders a card in place so it keeps its position.
+  // Re-rendered cards (provisional updates, retries) replace the old one in place.
   const existing = entryList.querySelector(`.entry-card[data-index="${idx}"]`);
   if (existing) entryList.replaceChild(card, existing);
   else entryList.appendChild(card);
