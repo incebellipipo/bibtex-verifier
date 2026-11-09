@@ -7,7 +7,7 @@ import { initInput } from "./input.js";
 import { initOnboarding } from "./onboarding.js";
 import { initPreview, updatePreview } from "./preview.js";
 import { initSettings } from "./settings.js";
-import { startVerificationFromContent } from "./verify.js";
+import { recheckEntry, startVerificationFromContent } from "./verify.js";
 
 function initTheme() {
   const root = document.documentElement;
@@ -51,7 +51,7 @@ function initHeroOverview() {
 initTheme();
 initHeroOverview();
 initPreview();
-initFieldActions();
+initFieldActions({ onRecheck: recheckEntry });
 initFilters();
 initSettings({
   onChange: updatePreview,

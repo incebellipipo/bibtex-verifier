@@ -354,7 +354,10 @@ function onInlineEdit(pill) {
   afterRowChange(row, "custom");
 }
 
-export function initFieldActions() {
+/**
+ * @param {{ onRecheck: (idx: number) => void }} handlers
+ */
+export function initFieldActions({ onRecheck }) {
   document.addEventListener("focusout", e => {
     const pill = e.target.closest('.pill-suggested[contenteditable="true"], .pill-value[contenteditable="true"]');
     if (!pill || !NAME_FIELDS.includes(pill.dataset.field)) return;
@@ -390,6 +393,9 @@ export function initFieldActions() {
       closeAddFieldForm(cancelAddFieldBtn.closest(".add-field-form"));
       return;
     }
+
+    const recheckBtn = e.target.closest(".btn-recheck-entry");
+    if (recheckBtn) return onRecheck(Number(recheckBtn.dataset.entry));
 
     const deleteBtn = e.target.closest(".btn-delete-entry");
     if (deleteBtn) return deleteEntry(deleteBtn);

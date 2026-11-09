@@ -28,15 +28,18 @@ const VERIFIED_ICON = `<svg width="11" height="11" viewBox="0 0 24 24" fill="non
 const EXTERNAL_LINK_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`;
 const CHECK_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
 const REVERT_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>`;
-const CHEVRON_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>`;
+const RECHECK_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>`;
+const CHEVRON_ICON =`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>`;
 const CODE_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
     </svg>`;
 
+// "<Status>. Fetched from A + B": the sources supplied the metadata; they are
+// not what the entry still needs.
 function statusTagContent(status, result) {
   const sources = result.verification_sources || [];
-  const sourceText = sources.length ? ` via ${esc(sources.join(" + "))}`
-    : result.online_manual_review ? " · Online source" : "";
+  const sourceText = sources.length ? `. Fetched from ${esc(sources.join(" + "))}`
+    : result.online_manual_review ? ". Online source" : "";
   return `${status === "verified" ? VERIFIED_ICON : ""}${statusLabel(status)}${sourceText}`;
 }
 
@@ -303,6 +306,10 @@ export function appendAddedFieldRow(card, idx, field) {
 
 function renderHints(r) {
   let html = "";
+  if (r.recheck_failed) {
+    html += `<div class="not-found-hint" role="status">The re-check could not reach the metadata
+      sources (rate limited or offline). The previous match is still shown; try again in a moment.</div>`;
+  }
   if (r.duplicate_of)
     html += `<div class="duplicate-row">Duplicate of <strong>${esc(r.duplicate_of)}</strong></div>`;
 
@@ -365,15 +372,20 @@ function headerHTML(r, idx, manuallyChecked) {
   const tagTitle = (r.verification_sources || []).length
     ? `Metadata source: ${r.verification_sources.join(", ")}`
     : r.online_manual_review ? "Online source requiring manual review" : statusLabel(r.status);
-  // The Checked marker is not offered until the result is final.
-  const checkedControl = r.checking ? "" : `<label class="entry-review-control entry-checked-control"
-      title="Manual review marker; does not change verification status">
-    <span class="entry-checked-label">Checked</span>
-    <span class="entry-checked-box">
-      <input class="entry-checked-checkbox" type="checkbox" data-entry="${idx}"
-        ${manuallyChecked ? "checked" : ""} aria-label="Mark this entry as manually checked">
-    </span>
-  </label>`;
+  // Re-check and the Checked marker are not offered until the result is final.
+  const checkedControl = r.checking ? "" : `<div class="entry-check-group">
+    <button class="btn-recheck-entry" type="button" data-entry="${idx}"
+        title="Re-check this entry against the metadata sources"
+        aria-label="Re-check this entry against the metadata sources">${RECHECK_ICON}</button>
+    <label class="entry-review-control entry-checked-control"
+        title="Manual review marker; does not change verification status">
+      <span class="entry-checked-label">Checked</span>
+      <span class="entry-checked-box">
+        <input class="entry-checked-checkbox" type="checkbox" data-entry="${idx}"
+          ${manuallyChecked ? "checked" : ""} aria-label="Mark this entry as manually checked">
+      </span>
+    </label>
+  </div>`;
 
   return `<div class="entry-header">
     <div class="entry-header-text">
@@ -409,7 +421,7 @@ function textEditorHTML(r, idx) {
     <div class="entry-text-editor-heading">
       <div>
         <strong>Edit BibTeX entry</strong>
-        <span>Applying replaces this entry and resets its field choices. Re-run verification after changing its title or DOI.</span>
+        <span>Applying replaces this entry and resets its field choices. After changing its title or DOI, use the re-check button (↻) next to Checked.</span>
       </div>
       <kbd>Ctrl/⌘ + Enter</kbd>
     </div>

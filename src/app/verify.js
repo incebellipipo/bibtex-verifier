@@ -83,6 +83,47 @@ async function lookupEntry(entry, onProgress = null) {
   }
 }
 
+/**
+ * Whether an entry is worth a network lookup: online-only pages are reviewed
+ * by hand, and an entry needs a title or DOI to search by.
+ */
+function needsLookup(entry) {
+  if (isOnlineOnlyEntry(entry)) return false;
+  return !!(entry.title || "").trim() || !!(entry.doi || "").trim();
+}
+
+const recheckingEntries = new Set();
+
+/**
+ * Look up one entry again, e.g. after Text edit replaced it. The card shows
+ * "Checking…" until the sources answer. If they can't be reached, the previous
+ * match stays and the card says so, instead of calling the entry not found.
+ */
+export async function recheckEntry(i) {
+  const entry = state.parsedEntries[i];
+  if (!entry || state.deletedEntries.has(i) || recheckingEntries.has(i)) return;
+  recheckingEntries.add(i);
+  const run = state.parsedEntries;
+  const duplicateOf = findDuplicateTitles(run)[i];
+  const previous = state.results[i]?._found || null;
+  // A new verification run replaces parsedEntries; drop answers meant for the old one.
+  const show = (found, extra) => {
+    if (state.parsedEntries === run) showLookupResult(entry, i, found, duplicateOf, extra);
+  };
+  try {
+    if (!needsLookup(entry)) {
+      show(null);
+      return;
+    }
+    show(previous, { checking: true });
+    const { found, inconclusive } = await lookupEntry(entry, (partial) => show(partial, { checking: true }));
+    if (inconclusive) show(previous, { recheck_failed: true });
+    else show(found);
+  } finally {
+    recheckingEntries.delete(i);
+  }
+}
+
 export function startVerificationFromContent(content, statusMsg) {
   const resumeTour = beginVerificationRun();
 
@@ -124,12 +165,7 @@ async function runVerification(resumeTour) {
     barProgressFill.style.width = Math.round(((i + 1) / total) * 100) + "%";
     barProgressText.textContent = `Verifying ${i + 1} / ${total}: ${title.slice(0, 50)}…`;
 
-    if (isOnlineOnlyEntry(entry)) {
-      showResult(buildResult(entry, i, null, duplicateOf[i]));
-      continue;
-    }
-
-    if (!title.trim() && !(entry.doi || "").trim()) {
+    if (!needsLookup(entry)) {
       showResult(buildResult(entry, i, null, duplicateOf[i]));
       continue;
     }

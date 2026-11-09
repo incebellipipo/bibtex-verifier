@@ -797,31 +797,33 @@ body.verification-active .hero {
     0 1px 0 rgba(0, 0, 0, 0.04);
 }
 
+/* Always stacked: title, then "key · type", then one row of badges (left)
+   and review controls (right), so every card reads the same way. */
 .entry-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0.6rem;
 }
 
 .entry-header-text {
   min-width: 0;
-  flex: 1;
 }
 
 .entry-header-aside {
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
+  align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem;
-  flex-shrink: 0;
+}
+
+.entry-header-aside .entry-review-controls {
+  margin-left: auto;
 }
 
 .entry-title {
   font-weight: 600;
   font-size: 0.95rem;
+  overflow-wrap: anywhere;
 }
 
 .entry-meta {
@@ -902,6 +904,8 @@ body.verification-active .hero {
   color: var(--accent);
   border: 1px solid rgba(91, 141, 239, 0.35);
 }
+/* The status badge names its sources and can be long; let it wrap on narrow cards. */
+.tag-result-status { white-space: normal; }
 .tag-updated { background: var(--green-bg); color: var(--green); }
 .tag-needs_review { background: var(--yellow-bg); color: var(--yellow); }
 .tag-not_found { background: var(--red-bg); color: var(--red); }
@@ -927,9 +931,9 @@ body.verification-active .hero {
 .entry-tags {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  align-items: center;
   gap: 0.4rem;
-  flex-shrink: 0;
+  min-width: 0;
 }
 
 .duplicate-row {
@@ -1984,6 +1988,44 @@ body.verification-active .hero {
   background: var(--accent-bg);
 }
 
+/* [ ↻ | Checked | ☐ ]: re-check button joined to the Checked marker. */
+.entry-check-group {
+  display: flex;
+  align-items: stretch;
+}
+
+.btn-recheck-entry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background: var(--surface-alt);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.btn-recheck-entry:hover,
+.btn-recheck-entry:focus-visible {
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.btn-recheck-entry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.entry-check-group .entry-checked-control {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
 .entry-checked-control {
   padding-left: 0.55rem;
   overflow: hidden;
@@ -2159,10 +2201,6 @@ body.verification-active .hero {
 .entry-text-editor-apply:hover { background: var(--accent); color: white; }
 
 @media (max-width: 640px) {
-  .entry-header-aside {
-    width: 100%;
-  }
-
   .entry-text-editor-heading kbd { display: none; }
   .entry-text-editor-footer { flex-wrap: wrap; }
   .entry-text-editor-error { flex: 1 1 100%; }
