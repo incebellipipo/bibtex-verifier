@@ -1,7 +1,7 @@
 // Entry cards: rendering, status/summary badges, and filter/search visibility.
 import {
-  applyFieldEdits, COMPARED_FIELDS, entriesToBib, entryMatchesQuery, namesToBibtex,
-  stripLatex, truncateAuthors,
+  applyFieldEdits, COMPARED_FIELDS, entriesToBib, entryMatchesQuery,
+  groupDuplicateResultIndices, namesToBibtex, stripLatex, truncateAuthors,
 } from "../lib/index.js";
 import { $, $$, esc } from "./dom.js";
 import { getSettings } from "./settings.js";
@@ -22,8 +22,20 @@ export function statusLabel(s) {
 }
 
 const REMOVE_ICON = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+const VERIFIED_ICON = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
 // External-link icon using the familiar Lucide/Feather box-and-arrow shape.
 const EXTERNAL_LINK_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`;
+
+function statusTagContent(status, result) {
+  const sources = result.verification_sources || [];
+  const sourceText = sources.length ? ` via ${esc(sources.join(" + "))}`
+    : result.online_manual_review ? " · Online source" : "";
+  return `${status === "verified" ? VERIFIED_ICON : ""}${statusLabel(status)}${sourceText}`;
+}
+
+function statusTagClass(status) {
+  return `status-tag tag-result-status tag-${status}`;
+}
 
 export const DIFF_TABLE_HEADER = `<tr><th>Field</th><th>Your Value</th><th>Suggested</th><th></th></tr>`;
 
@@ -82,7 +94,18 @@ function updateEntryEmptyState() {
   entryEmpty.classList.toggle("visible", !anyVisible);
 }
 
+function arrangeCards() {
+  const order = state.activeFilter === "all"
+    ? groupDuplicateResultIndices(state.results)
+    : state.results.filter(Boolean).map(result => result.index);
+  for (const index of order) {
+    const card = entryList.querySelector(`.entry-card[data-index="${index}"]`);
+    if (card) entryList.appendChild(card);
+  }
+}
+
 export function applyAllCardVisibility() {
+  arrangeCards();
   $$(".entry-card").forEach(applyCardVisibility);
   updateEntryEmptyState();
 }
@@ -100,6 +123,7 @@ export function updateSummary() {
     c[card.dataset.status] = (c[card.dataset.status] || 0) + 1;
     if (card.dataset.duplicate === "true") dupes++;
   });
+  $(".badge-all .summary-count").textContent = $$(".entry-card").length;
   $(".badge-verified .summary-count").textContent = c.verified;
   $(".badge-updated .summary-count").textContent = c.updated;
   $(".badge-review .summary-count").textContent = c.needs_review;
@@ -124,15 +148,16 @@ export function updateCardStatuses() {
     const hasInjectedRows = card.querySelector(".diff-row[data-injected]") !== null;
 
     let effectiveStatus = savedStatus;
-    if (hasInjectedRows && hasVisibleDiffs && savedStatus === "verified") effectiveStatus = "updated";
+    if (r.online_manual_review) effectiveStatus = "needs_review";
+    else if (hasInjectedRows && hasVisibleDiffs && savedStatus === "verified") effectiveStatus = "updated";
     else if (!hasVisibleDiffs && (savedStatus === "updated" || savedStatus === "needs_review")) effectiveStatus = "verified";
 
     card.dataset.status = effectiveStatus;
     card.className = card.className.replace(/status-\S+/, `status-${effectiveStatus}`);
-    const tag = card.querySelector(".status-tag:not(.tag-duplicate)");
+    const tag = card.querySelector(".tag-result-status");
     if (tag) {
-      tag.className = `status-tag tag-${effectiveStatus}`;
-      tag.textContent = statusLabel(effectiveStatus);
+      tag.className = statusTagClass(effectiveStatus);
+      tag.innerHTML = statusTagContent(effectiveStatus, r);
     }
 
     const diffTable = card.querySelector(".diff-table:not(.fields-table)");
@@ -250,6 +275,21 @@ function renderHints(r) {
   if (r.duplicate_of)
     html += `<div class="duplicate-row">Duplicate of <strong>${esc(r.duplicate_of)}</strong></div>`;
 
+  if (r.online_manual_review) {
+    let sourceLink = "";
+    try {
+      const url = new URL(r.online_url);
+      if (["http:", "https:"].includes(url.protocol)) {
+        sourceLink = `<a href="${esc(url.href)}" target="_blank" rel="noopener noreferrer">Open source page</a>`;
+      }
+    } catch { /* The editable URL field may currently be incomplete. */ }
+    html += `<div class="online-source-hint">
+      <strong>Online source:</strong> academic-paper indexes are not authoritative for this entry.
+      Review its title, author, publication date, and organization on the source page.
+      ${sourceLink}
+    </div>`;
+  }
+
   if (r.status === "needs_review" && r.found_title) {
     html += `<div class="review-hint">The closest database record may not be the paper you meant
       (<strong>${esc(String(r.title_score))}%</strong> title similarity to
@@ -259,8 +299,8 @@ function renderHints(r) {
 
   if (r.status === "not_found") {
     html += `<div class="not-found-hint">${(r.title || "").trim()
-      ? "No matching publication was found for this title, and any supplied DOI could not be confirmed through DataCite. Try fixing typos or check the reference manually."
-      : "This entry has neither a title nor a DataCite-confirmed DOI. Add one to your .bib file or verify the entry by hand."}</div>`;
+      ? "No matching publication was found for this title, and any supplied DOI could not be confirmed through DOI.org or DataCite. Try fixing typos or check the reference manually."
+      : "This entry has neither a title nor a confirmed DOI. Add one to your .bib file or verify the entry by hand."}</div>`;
   }
   return html;
 }
@@ -297,7 +337,8 @@ export function renderEntryCard(r) {
   if (!state.fieldEdits[idx]) state.fieldEdits[idx] = {};
 
   const card = document.createElement("div");
-  card.className = `entry-card status-${r.status}`;
+  const manuallyChecked = state.checkedEntries.has(idx);
+  card.className = `entry-card status-${r.status}${manuallyChecked ? " user-checked" : ""}`;
   card.dataset.status = r.status;
   card.dataset.index = idx;
   if (r.duplicate_of) card.dataset.duplicate = "true";
@@ -371,6 +412,14 @@ export function renderEntryCard(r) {
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
   </button>`;
+  const checkedControl = `<label class="entry-review-control entry-checked-control"
+      title="Manual review marker; does not change verification status">
+    <span class="entry-checked-label">Checked</span>
+    <span class="entry-checked-box">
+      <input class="entry-checked-checkbox" type="checkbox" data-entry="${idx}"
+        ${manuallyChecked ? "checked" : ""} aria-label="Mark this entry as manually checked">
+    </span>
+  </label>`;
   const textEditId = `entry-text-editor-${idx}`;
   const textEditBtn = `<button class="btn-text-edit-entry" type="button" data-entry="${idx}"
       aria-expanded="false" aria-controls="${textEditId}" title="Edit this entry as BibTeX text">
@@ -401,11 +450,19 @@ export function renderEntryCard(r) {
       <div class="entry-meta">${esc(r.entry_id)} &middot; ${esc(r.entry_type)}</div>
     </div>
     <div class="entry-header-aside">
-      ${jumpBtn}
-      ${textEditBtn}
       <div class="entry-tags">
         ${r.duplicate_of ? '<span class="status-tag tag-duplicate">Duplicate</span>' : ""}
-        <span class="status-tag tag-${r.status}">${statusLabel(r.status)}</span>
+        <span class="${statusTagClass(r.status)}"
+          title="${esc((r.verification_sources || []).length
+            ? `Metadata source: ${r.verification_sources.join(", ")}`
+            : r.online_manual_review ? "Online source requiring manual review" : statusLabel(r.status))}">
+          ${statusTagContent(r.status, r)}
+        </span>
+      </div>
+      <div class="entry-review-controls" role="group" aria-label="Entry review controls">
+        ${checkedControl}
+        ${jumpBtn}
+        ${textEditBtn}
       </div>
     </div>
   </div>${textEditor}${renderHints(r)}${diffHTML}${actionsHTML}${addFieldForm}${renderSearchLinks(r.title)}`;
@@ -415,5 +472,6 @@ export function renderEntryCard(r) {
   const existing = entryList.querySelector(`.entry-card[data-index="${idx}"]`);
   if (existing) entryList.replaceChild(card, existing);
   else entryList.appendChild(card);
+  arrangeCards();
   updateEntryEmptyState();
 }

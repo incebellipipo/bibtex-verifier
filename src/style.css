@@ -597,6 +597,7 @@ body.verification-active .hero {
 }
 
 /* Color the dot per-status even when inactive, so each filter is recognizable. */
+.badge-all .summary-dot { background: var(--text-dim); }
 .badge-verified  .summary-dot { background: var(--accent); }
 .badge-updated   .summary-dot { background: var(--green); }
 .badge-review    .summary-dot { background: var(--yellow); }
@@ -604,6 +605,7 @@ body.verification-active .hero {
 .badge-duplicates .summary-dot { background: var(--purple); }
 
 /* Active state: tinted background + colored text + colored count chip. */
+.summary-badge.active.badge-all        { background: var(--gray-bg);   color: var(--text);    border-color: var(--gray-border); }
 .summary-badge.active.badge-verified   { background: var(--accent-bg); color: var(--accent);  border-color: rgba(91, 141, 239, 0.35); }
 .summary-badge.active.badge-updated    { background: var(--green-bg);  color: var(--green);   border-color: var(--green-border); }
 .summary-badge.active.badge-review     { background: var(--yellow-bg); color: var(--yellow);  border-color: var(--yellow-border); }
@@ -811,6 +813,8 @@ body.verification-active .hero {
 .entry-header-aside {
   display: flex;
   align-items: flex-start;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 0.5rem;
   flex-shrink: 0;
 }
@@ -890,7 +894,14 @@ body.verification-active .hero {
   flex-shrink: 0;
 }
 
-.tag-verified { background: var(--accent-bg); color: var(--accent); }
+.tag-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 1px solid rgba(91, 141, 239, 0.35);
+}
 .tag-updated { background: var(--green-bg); color: var(--green); }
 .tag-needs_review { background: var(--yellow-bg); color: var(--yellow); }
 .tag-not_found { background: var(--red-bg); color: var(--red); }
@@ -911,6 +922,27 @@ body.verification-active .hero {
 }
 
 .duplicate-row strong { color: var(--text); }
+
+.online-source-hint {
+  margin-top: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-dim);
+  background: var(--teal-bg);
+  border: 1px solid var(--teal-border);
+  border-radius: var(--radius-sm);
+}
+
+.online-source-hint strong,
+.online-source-hint a {
+  color: var(--teal);
+}
+
+.online-source-hint a {
+  margin-left: 0.25rem;
+  white-space: nowrap;
+}
 
 /* ─── Diff table ───────────────────────────────────────────────── */
 .diff-table {
@@ -1496,6 +1528,7 @@ body.verification-active .hero {
 
 .btn-copy:hover { border-color: var(--accent); color: var(--accent); }
 .btn-copy.copied { border-color: var(--green); color: var(--green); }
+.btn-copy.copy-failed { border-color: var(--red); color: var(--red); }
 
 .btn-autoscroll {
   display: inline-flex;
@@ -1847,38 +1880,22 @@ body.verification-active .hero {
 
 .entry-card.hidden { display: none; }
 
-.btn-jump-preview {
-  display: inline-flex;
-  align-items: center;
-  gap: -2px;
-  padding: 0.25rem 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-alt);
-  color: var(--text-dim);
-  cursor: pointer;
-  opacity: 0.75;
+.entry-review-controls {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+  height: 30px;
   flex-shrink: 0;
-  transition: opacity 0.15s, border-color 0.15s, color 0.15s, background 0.15s;
-  font-size: 0;
-  line-height: 1;
 }
 
-.btn-jump-preview svg:last-child { margin-left: -5px; }
-
-.btn-jump-preview:hover {
-  opacity: 1;
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-bg);
-}
-
+.entry-review-control,
+.btn-jump-preview,
 .btn-text-edit-entry {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  min-height: 28px;
-  padding: 0.25rem 0.5rem;
+  box-sizing: border-box;
+  height: 30px;
+  min-height: 30px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-alt);
@@ -1887,14 +1904,80 @@ body.verification-active .hero {
   font-size: 0.72rem;
   line-height: 1;
   cursor: pointer;
-  opacity: 0.8;
   flex-shrink: 0;
-  transition: opacity 0.15s, border-color 0.15s, color 0.15s, background 0.15s;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.btn-jump-preview {
+  gap: -2px;
+  width: 38px;
+  justify-content: center;
+  padding: 0;
+  font-size: 0;
+}
+
+.btn-jump-preview svg:last-child { margin-left: -5px; }
+
+.btn-jump-preview:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.entry-checked-control {
+  padding-left: 0.55rem;
+  overflow: hidden;
+}
+
+.entry-checked-control:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.entry-checked-control:has(.entry-checked-checkbox:checked) {
+  color: var(--green);
+  border-color: var(--green-border);
+  background: var(--green-bg);
+}
+
+.entry-checked-control:has(.entry-checked-checkbox:checked) .entry-checked-box {
+  border-left-color: var(--green-border);
+  background: var(--green-bg);
+}
+
+.entry-checked-label {
+  padding-right: 0.5rem;
+}
+
+.entry-checked-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  width: 30px;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.entry-checked-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--green);
+}
+
+.entry-card.user-checked {
+  box-shadow: inset 3px 0 0 var(--green);
+}
+
+.btn-text-edit-entry {
+  gap: 0.35rem;
+  padding: 0 0.55rem;
 }
 
 .btn-text-edit-entry:hover,
 .btn-text-edit-entry.active {
-  opacity: 1;
   color: var(--accent);
   border-color: var(--accent);
   background: var(--accent-bg);
@@ -2016,8 +2099,10 @@ body.verification-active .hero {
 .entry-text-editor-apply:hover { background: var(--accent); color: white; }
 
 @media (max-width: 640px) {
-  .btn-text-edit-entry span { display: none; }
-  .btn-text-edit-entry { padding-inline: 0.4rem; }
+  .entry-header-aside {
+    width: 100%;
+  }
+
   .entry-text-editor-heading kbd { display: none; }
   .entry-text-editor-footer { flex-wrap: wrap; }
   .entry-text-editor-error { flex: 1 1 100%; }

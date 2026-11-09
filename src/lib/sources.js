@@ -127,3 +127,23 @@ export function dataCiteToStandard(record) {
     _source: "datacite",
   };
 }
+
+/** Convert a parsed BibTeX entry returned by citation.doi.org/format. */
+export function doiBibtexToStandard(entry) {
+  if (!entry) return null;
+  const pages = String(entry.pages || "").replace(/[\u2010-\u2015]/g, "-");
+  return {
+    title: entry.title || "",
+    author: entry.author || "",
+    editor: entry.editor || "",
+    year: entry.year || "",
+    journal: entry.journal || entry.booktitle || "",
+    volume: entry.volume || "",
+    number: entry.number || entry.issue || "",
+    pages,
+    doi: entry.doi || "",
+    publisher: entry.publisher || "",
+    url: entry.url || (entry.doi ? `https://doi.org/${entry.doi}` : ""),
+    _source: "doi_org",
+  };
+}

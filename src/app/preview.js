@@ -1,5 +1,5 @@
 // Live BibTeX preview panel: diff rendering, copy, download, collapse and scroll sync.
-import { buildExportEntries, diffLines, entriesToBib } from "../lib/index.js";
+import { buildPreviewEntries, diffLines, entriesToBib } from "../lib/index.js";
 import { $, $$, esc } from "./dom.js";
 import { getSettings } from "./settings.js";
 import { state } from "./state.js";
@@ -20,14 +20,17 @@ const COLLAPSED_KEY = "bv-preview-collapsed";
 
 let currentPreviewBib = "";
 let autoScrollEnabled = true;
+let copyFeedbackTimer = null;
 
 function buildPreviewBib() {
   const { parsedEntries, results, fieldEdits } = state;
-  return entriesToBib(buildExportEntries(parsedEntries, results, fieldEdits, getSettings(), state.deletedEntries));
+  return entriesToBib(buildPreviewEntries(
+    parsedEntries, results, fieldEdits, getSettings(), state.deletedEntries,
+  ));
 }
 
 function buildOriginalBib() {
-  return entriesToBib(state.parsedEntries.slice(0, state.results.length));
+  return entriesToBib(state.parsedEntries);
 }
 
 function renderDiff(oldBib, newBib) {
@@ -141,6 +144,63 @@ function initAutoScroll() {
   });
 }
 
+function legacyCopyText(text) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.setAttribute("aria-hidden", "true");
+  Object.assign(textarea.style, {
+    position: "fixed",
+    top: "0",
+    left: "-9999px",
+    width: "1px",
+    height: "1px",
+    opacity: "0",
+  });
+
+  const activeElement = document.activeElement;
+  document.body.appendChild(textarea);
+  textarea.select();
+  textarea.setSelectionRange(0, text.length);
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } finally {
+    textarea.remove();
+    activeElement?.focus?.({ preventScroll: true });
+  }
+  return copied;
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Clipboard permissions and non-secure contexts commonly block this API;
+      // fall through to the user-gesture based browser fallback.
+    }
+  }
+  return legacyCopyText(text);
+}
+
+function showCopyFeedback(message, kind) {
+  clearTimeout(copyFeedbackTimer);
+  const label = btnCopy.querySelector(".btn-copy-label");
+  label.textContent = message;
+  btnCopy.classList.toggle("copied", kind === "success");
+  btnCopy.classList.toggle("copy-failed", kind === "error");
+  btnCopy.title = kind === "success"
+    ? "The complete BibTeX preview was copied to the clipboard"
+    : message;
+  copyFeedbackTimer = setTimeout(() => {
+    label.textContent = "Copy";
+    btnCopy.classList.remove("copied", "copy-failed");
+    btnCopy.title = "Copy the complete BibTeX preview to clipboard";
+  }, 2200);
+}
+
 export function initPreview() {
   btnPreviewToggle.addEventListener("click", () => {
     const willCollapse = !previewPanelEl.classList.contains("is-collapsed");
@@ -160,17 +220,20 @@ export function initPreview() {
 
   initAutoScroll();
 
-  btnCopy.addEventListener("click", () => {
-    if (!currentPreviewBib) return;
-    navigator.clipboard.writeText(currentPreviewBib).then(() => {
-      btnCopy.classList.add("copied");
-      const origHTML = btnCopy.innerHTML;
-      btnCopy.innerHTML = origHTML.replace("Copy", "Copied!");
-      setTimeout(() => {
-        btnCopy.classList.remove("copied");
-        btnCopy.innerHTML = origHTML;
-      }, 1500);
-    });
+  btnCopy.addEventListener("click", async () => {
+    // Rebuild on demand so Copy never depends on a stale or partially rendered
+    // preview string.
+    currentPreviewBib = buildPreviewBib();
+    if (!currentPreviewBib) {
+      showCopyFeedback("Nothing to copy", "error");
+      return;
+    }
+    try {
+      const copied = await copyText(currentPreviewBib);
+      showCopyFeedback(copied ? "Copied!" : "Copy failed", copied ? "success" : "error");
+    } catch {
+      showCopyFeedback("Copy failed", "error");
+    }
   });
 
   btnDownload.addEventListener("click", () => {

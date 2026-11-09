@@ -186,11 +186,21 @@ function toggleRemoveField(xBtn) {
 }
 
 function deleteEntry(btn) {
-  state.deletedEntries.add(Number(btn.dataset.entry));
+  const idx = Number(btn.dataset.entry);
+  state.deletedEntries.add(idx);
+  state.checkedEntries.delete(idx);
   btn.closest(".entry-card").remove();
   updateSummary();
   applyAllCardVisibility();
   updatePreview();
+}
+
+function setEntryChecked(input) {
+  const idx = Number(input.dataset.entry);
+  const checked = input.checked;
+  if (checked) state.checkedEntries.add(idx);
+  else state.checkedEntries.delete(idx);
+  input.closest(".entry-card")?.classList.toggle("user-checked", checked);
 }
 
 function resizeEntryTextEditor(textarea) {
@@ -421,6 +431,11 @@ export function initFieldActions() {
 
     const bulkBtn = e.target.closest(".btn-accept-all, .btn-revert-all");
     if (bulkBtn) applyBulk(bulkBtn);
+  });
+
+  document.addEventListener("change", (e) => {
+    const checkedInput = e.target.closest(".entry-checked-checkbox");
+    if (checkedInput) setEntryChecked(checkedInput);
   });
 
   document.addEventListener("input", (e) => {

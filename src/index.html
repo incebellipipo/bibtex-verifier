@@ -6,7 +6,7 @@
   <meta name="google-site-verification" content="Ec53uaP67xWogWFEI0Asj4FyQZ3RjAtHp6CcQckrWOI" />
 
   <title>BibTeX Verifier — Catch Errors &amp; Hallucinated References in Your Bibliography</title>
-  <meta name="description" content="Free online tool to verify BibTeX entries and DOI metadata with DataCite, Semantic Scholar, CrossRef, and OpenAlex. Detects hallucinated references, wrong authors, incorrect years, and missing DOIs." />
+  <meta name="description" content="Free online tool to verify BibTeX entries and DOI metadata with DOI.org, DataCite, Semantic Scholar, CrossRef, and OpenAlex. Detects hallucinated references, wrong authors, incorrect years, and missing DOIs." />
   <meta name="keywords" content="BibTeX, bibliography checker, verify references, hallucinated citations, LaTeX, DataCite, CrossRef, Semantic Scholar, OpenAlex, DOI, citation checker, academic references, .bib file, Overleaf, BibLaTeX, reference manager, paper verification" />
   <meta name="author" content="merfanian" />
   <meta name="robots" content="index, follow" />
@@ -15,7 +15,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://merfanian.github.io/Bibtex-Verifier/" />
   <meta property="og:title" content="BibTeX Verifier — Catch Errors & Hallucinated References" />
-  <meta property="og:description" content="Free browser-based tool to verify your .bib file and DOI metadata with DataCite, Semantic Scholar, CrossRef, and OpenAlex." />
+  <meta property="og:description" content="Free browser-based tool to verify your .bib file and DOI metadata with DOI.org, DataCite, Semantic Scholar, CrossRef, and OpenAlex." />
   <meta property="og:site_name" content="BibTeX Verifier" />
 
   <meta name="twitter:card" content="summary_large_image" />
@@ -28,7 +28,7 @@
     "@type": "WebApplication",
     "name": "BibTeX Verifier",
     "url": "https://merfanian.github.io/Bibtex-Verifier/",
-    "description": "Free online tool to verify BibTeX bibliography entries and DOI metadata with DataCite, Semantic Scholar, CrossRef, and OpenAlex.",
+    "description": "Free online tool to verify BibTeX bibliography entries and DOI metadata with DOI.org, DataCite, Semantic Scholar, CrossRef, and OpenAlex.",
     "applicationCategory": "UtilitiesApplication",
     "operatingSystem": "Any",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -70,7 +70,8 @@
         <p class="hero-tagline">Catch errors, hallucinated references, and missing metadata before you submit.</p>
         <p class="hero-lead">Upload a <code>.bib</code> file or paste directly from Overleaf.
           BibTeX Verifier checks supplied DOIs with
-          <a href="https://datacite.org/" target="_blank">DataCite</a>, then checks entries against
+          <a href="https://citation.doi.org/api-docs.html" target="_blank">DOI.org</a>, with
+          <a href="https://datacite.org/" target="_blank">DataCite</a> as a fallback, then checks entries against
           <a href="https://www.crossref.org/" target="_blank">CrossRef</a> and
           <a href="https://www.semanticscholar.org/" target="_blank">Semantic Scholar</a>, with
           <a href="https://openalex.org/" target="_blank">OpenAlex</a> as a fallback, to find
@@ -102,27 +103,32 @@
 
     <div class="results-section">
       <div class="summary-bar">
-        <button type="button" class="summary-badge badge-verified active" data-filter="verified">
+        <button type="button" class="summary-badge badge-all active" data-filter="all" aria-pressed="true">
+          <span class="summary-dot"></span>
+          <span class="summary-label">All</span>
+          <span class="summary-count">0</span>
+        </button>
+        <button type="button" class="summary-badge badge-verified" data-filter="verified" aria-pressed="false">
           <span class="summary-dot"></span>
           <span class="summary-label">Verified</span>
           <span class="summary-count">0</span>
         </button>
-        <button type="button" class="summary-badge badge-updated active" data-filter="updated">
+        <button type="button" class="summary-badge badge-updated" data-filter="updated" aria-pressed="false">
           <span class="summary-dot"></span>
           <span class="summary-label">Auto-Updated</span>
           <span class="summary-count">0</span>
         </button>
-        <button type="button" class="summary-badge badge-review active" data-filter="needs_review">
+        <button type="button" class="summary-badge badge-review" data-filter="needs_review" aria-pressed="false">
           <span class="summary-dot"></span>
           <span class="summary-label">Needs Review</span>
           <span class="summary-count">0</span>
         </button>
-        <button type="button" class="summary-badge badge-notfound active" data-filter="not_found">
+        <button type="button" class="summary-badge badge-notfound" data-filter="not_found" aria-pressed="false">
           <span class="summary-dot"></span>
           <span class="summary-label">Not Found</span>
           <span class="summary-count">0</span>
         </button>
-        <button type="button" class="summary-badge badge-duplicates active" data-filter="duplicate">
+        <button type="button" class="summary-badge badge-duplicates" data-filter="duplicate" aria-pressed="false">
           <span class="summary-dot"></span>
           <span class="summary-label">Duplicates</span>
           <span class="summary-count">0</span>
@@ -159,9 +165,9 @@
                 <svg class="btn-preview-toggle-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
                 <span class="btn-preview-toggle-text">Hide</span>
               </button>
-              <button class="btn-copy" id="btn-copy-preview" title="Copy to clipboard">
+              <button type="button" class="btn-copy" id="btn-copy-preview" title="Copy the complete BibTeX preview to clipboard">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                Copy
+                <span class="btn-copy-label" aria-live="polite">Copy</span>
               </button>
               <button class="btn-autoscroll active" id="btn-autoscroll" title="Auto-scroll preview with page">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>
@@ -188,7 +194,7 @@
         <div class="step">
           <div class="step-num">2</div>
           <h3>Verify</h3>
-          <p>Supplied DOIs are checked through DataCite first. Matching DOI metadata is then compared and enriched through Semantic Scholar, CrossRef, and OpenAlex using the title. Authors, editors, year, venue, DOI, and other fields are checked against the published record.</p>
+          <p>Supplied DOIs are checked through DOI.org's BibTeX formatter first, with DataCite as a fallback. Matching DOI metadata is then compared and enriched through Semantic Scholar, CrossRef, and OpenAlex using the title. Authors, editors, year, venue, DOI, and other fields are checked against the published record.</p>
         </div>
         <div class="step">
           <div class="step-num">3</div>
@@ -216,7 +222,7 @@
         <div class="feature-card">
           <div class="feature-icon">&#128269;</div>
           <h3>Multi-source verification</h3>
-          <p>Checks supplied DOIs through DataCite, then uses Semantic Scholar, CrossRef, and OpenAlex to maximize coverage and metadata quality.</p>
+          <p>Checks supplied DOIs through DOI.org, falls back to DataCite, then uses Semantic Scholar, CrossRef, and OpenAlex to maximize coverage and metadata quality.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#128203;</div>
@@ -245,7 +251,7 @@
       <h2>FAQ</h2>
       <details>
         <summary>Can it detect AI-hallucinated references?</summary>
-        <p>Yes. Supplied DOIs are checked through DataCite, and titles are checked through Semantic Scholar, CrossRef, and OpenAlex. Entries without a credible match are flagged as "Not Found" or "Needs Review."</p>
+        <p>Yes. Supplied DOIs are checked through DOI.org with DataCite as a fallback, and titles are checked through Semantic Scholar, CrossRef, and OpenAlex. Entries without a credible match are flagged as "Not Found" or "Needs Review."</p>
       </details>
       <details>
         <summary>Is my data safe?</summary>
@@ -253,7 +259,7 @@
       </details>
       <details>
         <summary>Why are some entries "Not Found"?</summary>
-        <p>Not every DOI is registered with DataCite, and not every paper is indexed in Semantic Scholar, CrossRef, or OpenAlex. Missing DataCite metadata alone does not mean a DOI is invalid; the title-source checks still run.</p>
+        <p>DOI.org can resolve records across DOI registration agencies, while DataCite remains a fallback. Not every paper is indexed in Semantic Scholar, CrossRef, or OpenAlex, so the app still marks uncertain records for review.</p>
       </details>
       <details>
         <summary>Why does verification take a while?</summary>

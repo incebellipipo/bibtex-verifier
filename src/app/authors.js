@@ -66,7 +66,7 @@ function injectTruncationRows(max) {
     const res = state.results[idx];
     if (!entry || !entry.author) return;
     // No lookup match — don't present truncation as if it were an API suggestion.
-    if (res && res.status === "not_found") return;
+    if (res && (res.status === "not_found" || res.online_manual_review)) return;
     if (card.querySelector('.diff-row[data-field="author"]:not(.field-row-plain)')) return;
 
     if (entry.author.split(/\s+and\s+/i).length <= max) return;

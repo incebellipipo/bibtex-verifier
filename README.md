@@ -24,7 +24,7 @@
 
 </div>
 
-Runs **100% in your browser** -- no install, no server, no account. Supplied DOIs are checked with [DataCite](https://datacite.org/); paper titles are checked with [Semantic Scholar](https://www.semanticscholar.org/), [CrossRef](https://www.crossref.org/), and [OpenAlex](https://openalex.org/). Your complete `.bib` never leaves your machine.
+Runs **100% in your browser** -- no install, no server, no account. Supplied DOIs are checked with the [DOI Citation Formatter](https://citation.doi.org/api-docs.html), with [DataCite](https://datacite.org/) as a fallback; paper titles are checked with [Semantic Scholar](https://www.semanticscholar.org/), [CrossRef](https://www.crossref.org/), and [OpenAlex](https://openalex.org/). Your complete `.bib` never leaves your machine.
 
 ---
 
@@ -42,7 +42,7 @@ Runs **100% in your browser** -- no install, no server, no account. Supplied DOI
 ## Features
 
 - **Drag-and-drop** or **paste** BibTeX from Overleaf
-- **DOI-first, multi-source checks** (DataCite + Semantic Scholar + CrossRef + OpenAlex)
+- **DOI-first, multi-source checks** (DOI.org, DataCite fallback, Semantic Scholar, CrossRef, and OpenAlex)
 - **Hallucination detection** -- titles that don't exist in major indexes
 - **Pill-style diffs** -- choose your text or edit suggested metadata directly. Changes update the live preview and export.
 - **Raw entry editor** -- expand any result card and edit the complete BibTeX entry as text.
@@ -61,13 +61,13 @@ Runs **100% in your browser** -- no install, no server, no account. Supplied DOI
 
 ```
 Upload or paste .bib -> Parse entries -> For each entry:
-    DOI present? -> DataCite metadata check
+    DOI present? -> DOI.org BibTeX check -> DataCite fallback
     Title lookup -> Semantic Scholar -> CrossRef enrich -> OpenAlex fallback
 -> Compare fields -> Verified / Auto-updated / Needs review / Not found
 -> You edit choices -> Export corrected .bib
 ```
 
-**Statuses:** **Verified** (matches online record) | **Auto-updated** (same paper, metadata differs) | **Needs review** (weak title match -- possible typo or fake cite) | **Not found** (no index hit).
+**Statuses:** **Verified** (matches online record) | **Auto-updated** (same paper, metadata differs) | **Needs review** (weak title match, or an `@online` source needing manual page review) | **Not found** (no index hit).
 
 ---
 

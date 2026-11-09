@@ -2,8 +2,23 @@ import "./helpers/setup.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  crossrefToStandard, dataCiteToStandard, isPreprint, openAlexToStandard, ssToStandard,
+  crossrefToStandard, dataCiteToStandard, doiBibtexToStandard, isPreprint,
+  openAlexToStandard, parseBib, ssToStandard,
 } from "../src/lib/index.js";
+
+describe("doiBibtexToStandard", () => {
+  it("converts DOI.org BibTeX and normalizes page dashes", () => {
+    const entry = parseBib(`@misc{x, title={A DOI Paper}, author={Mendez, Ana},
+      journal={Proceedings}, DOI={10.1234/example}, year={2024}, month=july, pages={10–20}}`)[0];
+    const result = doiBibtexToStandard(entry);
+    assert.equal(result.title, "A DOI Paper");
+    assert.equal(result.author, "Mendez, Ana");
+    assert.equal(result.journal, "Proceedings");
+    assert.equal(result.doi, "10.1234/example");
+    assert.equal(result.pages, "10-20");
+    assert.equal(result._source, "doi_org");
+  });
+});
 
 describe("dataCiteToStandard", () => {
   it("converts singleton DOI metadata and editors to standard fields", () => {

@@ -8,8 +8,11 @@ const entrySearchInput = $("#entry-search-input");
 const entrySearchClear = $("#entry-search-clear");
 
 function syncBadges() {
-  $$(".summary-badge").forEach(b =>
-    b.classList.toggle("active", state.activeFilter === "all" || b.dataset.filter === state.activeFilter));
+  $$(".summary-badge").forEach(b => {
+    const active = b.dataset.filter === state.activeFilter;
+    b.classList.toggle("active", active);
+    b.setAttribute("aria-pressed", active ? "true" : "false");
+  });
 }
 
 function setSearch(value) {
@@ -30,8 +33,7 @@ export function initFilters() {
   document.addEventListener("click", (e) => {
     const badge = e.target.closest(".summary-badge");
     if (!badge) return;
-    const filter = badge.dataset.filter;
-    state.activeFilter = state.activeFilter === filter ? "all" : filter;
+    state.activeFilter = badge.dataset.filter;
     syncBadges();
     applyAllCardVisibility();
   });

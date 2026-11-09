@@ -7,14 +7,16 @@ const realFetch = globalThis.fetch;
 let calls;
 
 const json = (status, body) => new Response(JSON.stringify(body), { status });
+const plain = (status, body = "") => new Response(body, { status });
 
 /** Route mocked requests by host; each handler gets the parsed URL. */
-function mockFetch({ dc = () => json(404, {}), ss = () => json(404, {}),
+function mockFetch({ doi = () => plain(404), dc = () => json(404, {}), ss = () => json(404, {}),
   cr = () => json(200, { message: { items: [] } }),
   oa = () => json(200, { results: [] }) } = {}) {
   globalThis.fetch = async (url) => {
     const u = new URL(url);
     calls.push(u);
+    if (u.host.includes("citation.doi.org")) return doi(u);
     if (u.host.includes("datacite")) return dc(u);
     if (u.host.includes("semanticscholar")) return ss(u);
     if (u.host.includes("crossref")) return cr(u);
@@ -52,6 +54,18 @@ const dcRecord = {
   },
 };
 
+const citationBibtex = `@article{Vaswani_2017,
+  title={Attention Is All You Need},
+  url={https://doi.org/10.5555/1},
+  DOI={10.5555/1},
+  journal={NeurIPS},
+  publisher={Example Press},
+  author={Vaswani, Ashish},
+  year={2017},
+  month=july,
+  pages={5998–6008}
+}`;
+
 describe("lookupPaper", () => {
   beforeEach(() => {
     calls = [];
@@ -60,7 +74,7 @@ describe("lookupPaper", () => {
   });
   afterEach(() => { globalThis.fetch = realFetch; });
 
-  it("checks a supplied DOI in DataCite before using its metadata", async () => {
+  it("falls back to DataCite when DOI.org has no record", async () => {
     mockFetch({ dc: () => json(200, dcRecord) });
     const found = await lookupPaper(
       "Attention Is All You Need", "https://doi.org/10.5555/1",
@@ -89,6 +103,37 @@ describe("lookupPaper", () => {
     assert.equal(found._source, "datacite+semantic_scholar+crossref");
     assert.equal(found.volume, "30");
     assert.equal(found.pages, "5998-6008");
+  });
+
+  it("starts independent DOI and title providers concurrently", async () => {
+    const pendingResponses = new Map();
+    globalThis.fetch = (url) => {
+      const u = new URL(url);
+      calls.push(u);
+      return new Promise(resolve => pendingResponses.set(
+        u.host.includes("citation.doi.org") ? "doi"
+          : u.host.includes("semanticscholar") ? "ss" : "cr",
+        resolve,
+      ));
+    };
+
+    const lookup = lookupPaper(
+      "Attention Is All You Need", "10.5555/1",
+      { title: "Attention Is All You Need", author: "Vaswani, Ashish", year: "2017" },
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    assert.deepEqual(new Set(pendingResponses.keys()), new Set(["doi", "ss", "cr"]));
+    pendingResponses.get("doi")(plain(200, citationBibtex));
+    pendingResponses.get("ss")(json(200, { data: [ssPaper] }));
+    pendingResponses.get("cr")(json(200, { message: { items: [crItem] } }));
+
+    const found = await lookup;
+    assert.equal(found._source, "doi_org+semantic_scholar+crossref");
+    assert.equal(found.pages, "5998-6008");
+    const request = calls.find(u => u.host.includes("citation.doi.org"));
+    assert.equal(request.searchParams.get("style"), "bibtex");
+    assert.equal(request.searchParams.get("lang"), "en-US");
   });
 
   it("ignores DataCite metadata when the DOI belongs to a different work", async () => {

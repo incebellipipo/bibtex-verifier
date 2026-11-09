@@ -1,11 +1,12 @@
-// Network layer: rate-limited DOI metadata retrieval from DataCite plus title
-// lookups against Semantic Scholar, CrossRef and OpenAlex.
+// Network layer: rate-limited DOI metadata retrieval from DOI.org, with
+// DataCite fallback, plus title lookups against Semantic Scholar, CrossRef and OpenAlex.
 import {
-  authorsNeedEnrichment, bestMatch, crossrefToStandard, dataCiteToStandard, isSamePaper,
-  mergeMetadata, MIN_TITLE_SIM, openAlexToStandard, ssToStandard, TITLE_MATCH_THRESHOLD,
-  titleSimilarity,
+  authorsNeedEnrichment, bestMatch, crossrefToStandard, dataCiteToStandard,
+  doiBibtexToStandard, isSamePaper, mergeMetadata, MIN_TITLE_SIM, openAlexToStandard,
+  parseBib, ssToStandard, TITLE_MATCH_THRESHOLD, titleSimilarity,
 } from "../lib/index.js";
 
+const DOI_CITATION_API = "https://citation.doi.org/format";
 const DATACITE_API = "https://api.datacite.org/dois";
 const CROSSREF_API = "https://api.crossref.org/works";
 const SS_MATCH = "https://api.semanticscholar.org/graph/v1/paper/search/match";
@@ -35,6 +36,7 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // One bucket per source: current delay, its clamps, last request time, and a
 // run of consecutive successes used to speed back up.
 const RATE_DEFAULTS = {
+  doi: { delay: 100, min: 50, max: 2000 },
   dc: { delay: 100, min: 50, max: 2000 },
   ss: { delay: 500, min: 300, max: 3000 },
   cr: { delay: 100, min: 50,  max: 2000 },
@@ -64,14 +66,18 @@ function rateSuccess(source) {
 }
 
 function sourceOf(url) {
+  if (url.includes("citation.doi.org")) return "doi";
   if (url.includes("datacite.org")) return "dc";
   if (url.includes("semanticscholar.org")) return "ss";
   if (url.includes("openalex.org")) return "oa";
   return "cr";
 }
 
-async function fetchJSON(url, params, { is404Ok = false } = {}) {
-  const { maxRetries: retries, retryBaseMs } = apiSettings;
+async function fetchJSON(url, params, {
+  is404Ok = false, responseType = "json", maxRetries = apiSettings.maxRetries,
+} = {}) {
+  const { retryBaseMs } = apiSettings;
+  const retries = maxRetries;
   const u = new URL(url);
   for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
 
@@ -86,7 +92,7 @@ async function fetchJSON(url, params, { is404Ok = false } = {}) {
       const resp = await fetch(u.toString());
       if (resp.ok) {
         rateSuccess(source);
-        return resp.json();
+        return responseType === "text" ? resp.text() : resp.json();
       }
       if (resp.status === 404 && is404Ok) return null;
       // 429 and 5xx are transient: retry, then surface as an error so
@@ -162,12 +168,35 @@ async function searchDataCiteDoi(value) {
   return data ? dataCiteToStandard(data) : null;
 }
 
+async function searchDoiCitation(value) {
+  const doi = normalizeDoi(value);
+  if (!doi) return null;
+  const bibtex = await fetchJSON(DOI_CITATION_API, {
+    doi, style: "bibtex", lang: "en-US",
+  }, {
+    is404Ok: true,
+    responseType: "text",
+    // DataCite is the fallback, so do not hold the run through the full retry
+    // budget when the primary formatter is temporarily unavailable.
+    maxRetries: 1,
+  });
+  const entry = parseBib(bibtex || "")[0];
+  return entry ? doiBibtexToStandard(entry) : null;
+}
+
 async function lookupByTitle(title, attempt) {
   if (!title.trim()) return null;
 
-  const ssMatch = await attempt(() => searchSSMatch(title));
+  // These providers are independent. Starting them together removes one full
+  // network round trip per entry without changing source priority or match
+  // selection. Each provider still uses its own adaptive rate bucket.
+  const [ssMatch, crossrefResults] = await Promise.all([
+    attempt(() => searchSSMatch(title)),
+    attempt(() => searchCrossref(title)),
+  ]);
+  const crMatch = bestMatch(crossrefResults || [], title);
+
   if (ssMatch && titleSimilarity(title, ssMatch.title || "") >= MIN_TITLE_SIM) {
-    const crMatch = bestMatch((await attempt(() => searchCrossref(title))) || [], title);
     let merged = crMatch && isSamePaper(ssMatch, crMatch)
       ? mergeMetadata(ssMatch, crMatch) : ssMatch;
 
@@ -181,7 +210,6 @@ async function lookupByTitle(title, attempt) {
     return merged;
   }
 
-  const crMatch = bestMatch((await attempt(() => searchCrossref(title))) || [], title);
   if (crMatch) return crMatch;
 
   const oaMatch = bestMatch((await attempt(() => searchOpenAlex(title))) || [], title);
@@ -190,20 +218,20 @@ async function lookupByTitle(title, attempt) {
   return bestMatch((await attempt(() => searchSSSearch(title))) || [], title);
 }
 
-function dataCiteMatchesEntry(entry, found) {
+function doiRecordMatchesEntry(entry, found) {
   if (!found?.title) return false;
   if (found._doiActive === false
       || (found._doiState && found._doiState !== "findable")) return false;
   if (entry.title?.trim()
       && titleSimilarity(entry.title, found.title) < TITLE_MATCH_THRESHOLD) return false;
-  // isSamePaper also checks year and author overlap. Supplying the confirmed
-  // DataCite title here lets DOI-only entries pass while retaining those checks.
+  // isSamePaper also checks year and author overlap. The resolved DOI title
+  // lets DOI-only entries pass while retaining those checks.
   return isSamePaper({ ...entry, title: found.title }, found);
 }
 
 /**
- * Check a supplied DOI through DataCite, then find and merge matching title
- * metadata. Returns null when no source has a credible record.
+ * Check a supplied DOI through DOI.org (falling back to DataCite), then find
+ * and merge matching title metadata. Returns null when no source has a credible record.
  * Throws TransientLookupError when nothing matched but a source failed
  * transiently, so the caller can retry instead of reporting "not found".
  */
@@ -219,19 +247,23 @@ export async function lookupPaper(title, doi = "", original = {}) {
   };
 
   const entry = { ...original, title: title || original.title || "" };
-  const dataCiteRecord = doi
-    ? await attempt(() => searchDataCiteDoi(doi))
-    : null;
-  const dataCiteMatch = dataCiteMatchesEntry(entry, dataCiteRecord)
-    ? dataCiteRecord : null;
+  // DOI and title providers do not depend on each other, so overlap their
+  // network waits. Both results are still evaluated before returning.
+  const [doiRecord, titleMatch] = await Promise.all([
+    doi ? (async () => {
+      const doiOrgRecord = await attempt(() => searchDoiCitation(doi));
+      return doiOrgRecord || attempt(() => searchDataCiteDoi(doi));
+    })() : Promise.resolve(null),
+    lookupByTitle(title, attempt),
+  ]);
+  const doiMatch = doiRecordMatchesEntry(entry, doiRecord) ? doiRecord : null;
 
-  const titleMatch = await lookupByTitle(title, attempt);
-  if (dataCiteMatch) {
+  if (doiMatch) {
     // The DOI-specific record is primary. Matching title sources may fill
-    // fields DataCite does not carry, or provide a more complete author list.
-    return titleMatch && isSamePaper(dataCiteMatch, titleMatch)
-      ? mergeMetadata(dataCiteMatch, titleMatch)
-      : dataCiteMatch;
+    // fields it does not carry, or provide a more complete author list.
+    return titleMatch && isSamePaper(doiMatch, titleMatch)
+      ? mergeMetadata(doiMatch, titleMatch)
+      : doiMatch;
   }
   if (titleMatch) return titleMatch;
 

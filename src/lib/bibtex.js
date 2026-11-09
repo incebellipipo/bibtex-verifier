@@ -91,6 +91,16 @@ function extractNumberFieldValue(str, start) {
   return { value: m[1], next };
 }
 
+/** Parse bare BibTeX values such as `month = july`. */
+function extractBareFieldValue(str, start) {
+  const m = /^([^,}\s]+)/.exec(str.slice(start));
+  if (!m) return { value: "", next: start };
+  let next = start + m[1].length;
+  next = skipWhitespace(str, next);
+  if (str[next] === ",") next = skipWhitespace(str, next + 1);
+  return { value: m[1], next };
+}
+
 function parseEntryFields(body) {
   const fields = {};
   let i = skipWhitespace(body, 0);
@@ -106,7 +116,9 @@ function parseEntryFields(body) {
     if (body[i] === "{") ext = extractBracedFieldValue(body, i);
     else if (body[i] === '"') ext = extractQuotedFieldValue(body, i);
     else if (/\d/.test(body[i])) ext = extractNumberFieldValue(body, i);
-    else break;
+    else ext = extractBareFieldValue(body, i);
+
+    if (ext.next === i) break;
 
     fields[key] = ext.value.replace(/\s*\n\s*/g, " ").trim();
     i = ext.next;

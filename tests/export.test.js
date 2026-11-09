@@ -2,8 +2,8 @@ import "./helpers/setup.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  applyFieldEdits, buildExportEntries, buildResult, diffLines, entriesToBib,
-  findDuplicateTitles, parseBib, truncateAuthors,
+  applyFieldEdits, buildExportEntries, buildPreviewEntries, buildResult, diffLines, entriesToBib,
+  findDuplicateTitles, groupDuplicateResultIndices, isOnlineOnlyEntry, parseBib, truncateAuthors,
 } from "../src/lib/index.js";
 
 const DEFAULT_SETTINGS = {
@@ -21,6 +21,29 @@ describe("findDuplicateTitles", () => {
       { title: "Other" },
     ]);
     assert.deepEqual(dups, [null, null, "a", null, "b"]);
+  });
+});
+
+describe("groupDuplicateResultIndices", () => {
+  it("places duplicate results immediately after their original", () => {
+    const results = [
+      { index: 0, entry_id: "a", duplicate_of: null },
+      { index: 1, entry_id: "b", duplicate_of: null },
+      { index: 2, entry_id: "c", duplicate_of: "a" },
+      { index: 3, entry_id: "d", duplicate_of: null },
+      { index: 4, entry_id: "e", duplicate_of: "a" },
+      { index: 5, entry_id: "f", duplicate_of: "b" },
+    ];
+    assert.deepEqual(groupDuplicateResultIndices(results), [0, 2, 4, 1, 5, 3]);
+  });
+
+  it("keeps partial and orphaned results visible", () => {
+    const results = [
+      { index: 0, entry_id: "a", duplicate_of: null },
+      null,
+      { index: 2, entry_id: "c", duplicate_of: "missing" },
+    ];
+    assert.deepEqual(groupDuplicateResultIndices(results), [0, 2]);
   });
 });
 
@@ -44,6 +67,68 @@ describe("buildResult", () => {
     assert.equal(r.duplicate_of, "other");
     assert.equal(r._found, found);
     assert.ok(r.field_diffs.some(d => d.field === "year"));
+  });
+
+  it("marks an entry verified when its DOI was accepted from DataCite", () => {
+    const r = buildResult(
+      { ...entry, doi: "https://doi.org/10.1234/Example" }, 0,
+      { title: "Test Paper", year: "2020", doi: "10.1234/example", _source: "datacite+crossref" },
+    );
+    assert.equal(r.verified_by_datacite, true);
+    assert.deepEqual(r.verification_sources, ["DataCite", "CrossRef"]);
+  });
+
+  it("marks a matching DOI.org record as a verification source", () => {
+    const r = buildResult(
+      { ...entry, doi: "10.1234/example" }, 0,
+      { title: "Test Paper", year: "2020", doi: "10.1234/example", _source: "doi_org+crossref" },
+    );
+    assert.equal(r.verified_by_doi_org, true);
+    assert.deepEqual(r.verification_sources, ["DOI.org", "CrossRef"]);
+  });
+
+  it("does not retain DataCite verification for a different DOI", () => {
+    const r = buildResult(
+      { ...entry, doi: "10.1234/changed" }, 0,
+      { title: "Test Paper", year: "2020", doi: "10.1234/original", _source: "datacite" },
+    );
+    assert.equal(r.verified_by_datacite, false);
+  });
+
+  it("does not mark a fallback-only match as DataCite verified", () => {
+    const r = buildResult(
+      { ...entry, doi: "10.1234/example" }, 0,
+      { title: "Test Paper", year: "2020", doi: "10.1234/example", _source: "crossref" },
+    );
+    assert.equal(r.verified_by_datacite, false);
+    assert.deepEqual(r.verification_sources, ["CrossRef"]);
+  });
+
+  it("reports all recognized metadata sources without duplicates", () => {
+    const r = buildResult(
+      entry, 0,
+      { title: "Test Paper", year: "2020", _source: "semantic_scholar+crossref+openalex+crossref" },
+    );
+    assert.deepEqual(r.verification_sources, ["Semantic Scholar", "CrossRef", "OpenAlex"]);
+  });
+
+  it("keeps an online URL entry for manual review instead of marking it not found", () => {
+    const online = {
+      ENTRYTYPE: "online", ID: "post", title: "A Web Article",
+      url: "https://example.com/post", year: "2026",
+    };
+    const r = buildResult(online, 0, null);
+    assert.equal(r.status, "needs_review");
+    assert.equal(r.online_source, true);
+    assert.equal(r.online_manual_review, true);
+    assert.equal(r.online_url, "https://example.com/post");
+    assert.equal(isOnlineOnlyEntry(online), true);
+  });
+
+  it("still sends DOI-bearing online entries through academic verification", () => {
+    assert.equal(isOnlineOnlyEntry({
+      ENTRYTYPE: "online", url: "https://example.com/post", doi: "10.1234/example",
+    }), false);
   });
 
   it("builds full diffs for needs_review", () => {
@@ -153,6 +238,32 @@ describe("buildExportEntries", () => {
     const stillPreprint = [{ status: "updated", suggested: { journal: "CoRR" } }];
     assert.equal(buildExportEntries(e, stillPreprint, {}, { ...DEFAULT_SETTINGS, preferPublished: true })[0].booktitle,
       "arXiv preprint");
+  });
+});
+
+describe("buildPreviewEntries", () => {
+  it("includes unprocessed entries unchanged while applying completed results", () => {
+    const entries = [
+      { ENTRYTYPE: "article", ID: "done", title: "Processed", year: "2020" },
+      { ENTRYTYPE: "online", ID: "waiting", title: "Still waiting", url: "https://example.com" },
+    ];
+    const results = [{ status: "updated", suggested: { year: "2021" } }];
+    const preview = buildPreviewEntries(entries, results, {
+      0: { year: { action: "found", value: "2021" } },
+    }, DEFAULT_SETTINGS);
+
+    assert.equal(preview.length, 2);
+    assert.equal(preview[0].year, "2021");
+    assert.deepEqual(preview[1], entries[1]);
+  });
+
+  it("still respects deleted entries across the complete preview", () => {
+    const entries = [
+      { ENTRYTYPE: "article", ID: "a", title: "A" },
+      { ENTRYTYPE: "article", ID: "b", title: "B" },
+    ];
+    const preview = buildPreviewEntries(entries, [], {}, DEFAULT_SETTINGS, new Set([1]));
+    assert.deepEqual(preview.map(entry => entry.ID), ["a"]);
   });
 });
 

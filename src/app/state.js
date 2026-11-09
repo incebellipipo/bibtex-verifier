@@ -7,6 +7,8 @@ export const state = {
   // fieldEdits[i][field] = { action: "original" | "found" | "custom" | "remove", value }
   fieldEdits: {},
   deletedEntries: new Set(),
+  // Entries the user has explicitly reviewed during this run.
+  checkedEntries: new Set(),
   activeFilter: "all",
   activeSearch: "",
 };
@@ -16,4 +18,5 @@ export function resetRunState() {
   state.results = [];
   state.fieldEdits = {};
   state.deletedEntries = new Set();
+  state.checkedEntries = new Set();
 }

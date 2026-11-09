@@ -1,5 +1,7 @@
 // Verification run: parse the .bib, look up each entry, render results as they arrive.
-import { buildResult, findDuplicateTitles, parseBib, stripLatex } from "../lib/index.js";
+import {
+  buildResult, findDuplicateTitles, isOnlineOnlyEntry, parseBib, stripLatex,
+} from "../lib/index.js";
 import { lookupPaper, resetRateLimits, sleep, TransientLookupError } from "./api.js";
 import { updateAuthorPills } from "./authors.js";
 import { clearCards, renderEntryCard } from "./cards.js";
@@ -89,6 +91,9 @@ export function startVerificationFromContent(content, statusMsg) {
 
   document.body.classList.add("verification-active");
   resultsSection.style.display = "block";
+  // Show and make the complete bibliography copyable immediately. Entries are
+  // updated in place as their verification results arrive.
+  updatePreview();
   barProgressText.textContent = `Verifying 0 / ${state.parsedEntries.length} entries...`;
   runVerification(resumeTour);
 }
@@ -105,6 +110,11 @@ async function runVerification(resumeTour) {
     const title = entry.title || "";
     barProgressFill.style.width = Math.round(((i + 1) / total) * 100) + "%";
     barProgressText.textContent = `Verifying ${i + 1} / ${total}: ${title.slice(0, 50)}…`;
+
+    if (isOnlineOnlyEntry(entry)) {
+      showResult(buildResult(entry, i, null, duplicateOf[i]));
+      continue;
+    }
 
     if (!title.trim() && !(entry.doi || "").trim()) {
       showResult(buildResult(entry, i, null, duplicateOf[i]));

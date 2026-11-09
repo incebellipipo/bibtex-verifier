@@ -79,3 +79,13 @@ export function buildExportEntries(entries, results, fieldEdits, settings, delet
   }
   return final;
 }
+
+/**
+ * Build a complete live preview while verification is still in progress.
+ * Processed entries receive their current edits; entries without a result yet
+ * remain unchanged instead of disappearing from the preview and clipboard.
+ */
+export function buildPreviewEntries(entries, results, fieldEdits, settings, deletedEntries = new Set()) {
+  const completeResults = Array.from({ length: entries.length }, (_, i) => results[i]);
+  return buildExportEntries(entries, completeResults, fieldEdits, settings, deletedEntries);
+}

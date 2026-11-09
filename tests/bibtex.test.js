@@ -90,6 +90,12 @@ describe("parseBib", () => {
     assert.equal(parseBib(`@article{test, title={Test}, year=2023}`)[0].year, "2023");
   });
 
+  it("handles bare BibTeX macros without dropping later fields", () => {
+    const entry = parseBib(`@article{test, title={Test}, month=july, pages={10-20}}`)[0];
+    assert.equal(entry.month, "july");
+    assert.equal(entry.pages, "10-20");
+  });
+
   it("returns empty array for invalid input", () => {
     assert.deepEqual(parseBib("not bibtex"), []);
     assert.deepEqual(parseBib(""), []);

@@ -71,7 +71,7 @@ function markOnboardingComplete() {
 const introOnboardingSteps = [
   {
     title: "Welcome",
-    body: "BibTeX Verifier checks supplied DOIs through DataCite, then checks titles through Semantic Scholar, CrossRef, and OpenAlex — finding wrong metadata, missing DOIs, duplicates, and citations that don’t exist online. Your file stays in the browser.",
+    body: "BibTeX Verifier checks supplied DOIs through DOI.org with DataCite as a fallback, then checks titles through Semantic Scholar, CrossRef, and OpenAlex — finding wrong metadata, missing DOIs, duplicates, and citations that don’t exist online. Your file stays in the browser.",
     target: null,
   },
   {
@@ -90,7 +90,7 @@ const introOnboardingSteps = [
   },
   {
     title: "Run verification",
-    body: "Click <strong>Verify BibTeX</strong> when you’re ready. The app queries DataCite for supplied DOIs, then Semantic Scholar, CrossRef, and OpenAlex by title. <strong>When it finishes, the tour continues</strong> and walks through the results.",
+    body: "Click <strong>Verify BibTeX</strong> when you’re ready. The app queries DOI.org for supplied DOIs, uses DataCite as a fallback, then checks Semantic Scholar, CrossRef, and OpenAlex by title. <strong>When it finishes, the tour continues</strong> and walks through the results.",
     target: "#btn-verify",
   },
   {
@@ -110,7 +110,7 @@ const postVerifySteps = [
   },
   {
     title: "First entry — metadata updated",
-    body: "This row matched a real paper. The sample used a <strong>wrong journal</strong> on purpose — suggested metadata comes from DataCite / Semantic Scholar / CrossRef / OpenAlex. Each line compares your text to the suggestion; accept or revert per field.",
+    body: "This row matched a real paper. The sample used a <strong>wrong journal</strong> on purpose — suggested metadata comes from DOI.org / DataCite / Semantic Scholar / CrossRef / OpenAlex. Each line compares your text to the suggestion; accept or revert per field.",
     target: ".entry-list .entry-card:nth-child(1)",
     panelTop: true,
   },
